@@ -66,7 +66,7 @@ def get_questions(
     query = f"""
         SELECT id, pregunta, opcion_a, opcion_b, opcion_c, opcion_d,
                correcta, categoria, dificultad
-        FROM quiz.preguntas
+        FROM workspace.quiz.preguntas
         {where}
         ORDER BY rand()
         LIMIT ?
@@ -88,7 +88,7 @@ def save_game(game: GameCreate):
             with closing(connection.cursor()) as cursor:
                 cursor.execute(
                     """
-                    INSERT INTO quiz.resultados
+                    INSERT INTO workspace.quiz.resultados
                     (partida_id, jugador, fecha, puntuacion, total_preguntas, porcentaje)
                     VALUES (?, ?, current_timestamp(), ?, ?, ?)
                     """,
@@ -102,7 +102,7 @@ def save_game(game: GameCreate):
 def get_ranking():
     query = """
         SELECT jugador, MAX(puntuacion) AS puntuacion, MAX(porcentaje) AS porcentaje
-        FROM quiz.resultados
+        FROM workspace.quiz.resultados
         GROUP BY jugador
         ORDER BY porcentaje DESC, puntuacion DESC, jugador ASC
         LIMIT 20
