@@ -1,6 +1,6 @@
 # OneToFour
 
-**Autor: javigarzon1**
+**Autor: Javi Garzón**
 
 Proyecto de preguntas y respuestas desarrollado con Python, PySpark y Databricks.
 
