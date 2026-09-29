@@ -1,0 +1,8 @@
+<script setup>
+import {ref} from 'vue'
+import {useRouter} from 'vue-router'
+const router=useRouter(),jugador=ref(''),numero=ref(5),categoria=ref('Todas'),dificultad=ref('Todas')
+function empezar(){if(!jugador.value.trim())return;router.push({path:'/jugar',query:{jugador:jugador.value.trim(),numero:numero.value,categoria:categoria.value,dificultad:dificultad.value}})}
+</script>
+<template><section class="home page"><div><small>QUIZ · ONE TO FOUR</small><h1>¿Cuánto<br><em>sabes?</em></h1><p>Pon a prueba tus conocimientos. Cuatro opciones, una respuesta correcta y una nueva partida cada vez.</p>
+<form class="card" @submit.prevent="empezar"><label>Tu nombre<input v-model="jugador" placeholder="Escribe tu nombre" maxlength="30"></label><div class="grid"><label>Preguntas<select v-model="numero"><option :value="5">5</option><option :value="10">10</option></select></label><label>Categoría<select v-model="categoria"><option>Todas</option><option>Geografía</option><option>Matemáticas</option><option>Programación</option><option>Ciencia</option><option>Databricks</option></select></label></div><label>Dificultad<select v-model="dificultad"><option>Todas</option><option>Fácil</option><option>Medio</option></select></label><button class="primary" :disabled="!jugador.trim()">Empezar partida <span>→</span></button></form></div><div class="visual"><strong>1</strong><i>/</i><strong>4</strong><p>Una pregunta.<br>Cuatro posibilidades.</p></div></section></template>
