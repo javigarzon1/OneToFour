@@ -33,6 +33,7 @@ spark.sql(f"CREATE SCHEMA IF NOT EXISTS {SCHEMA}")
 # Los widgets permiten utilizar el mismo notebook de forma interactiva
 # o como tarea parametrizada de un Job.
 dbutils.widgets.text("jugador", "Jugador", "Jugador")
+dbutils.widgets.dropdown("modo", "interactivo", ["interactivo", "job"], "Modo")
 dbutils.widgets.dropdown("numero_preguntas", "5", [str(i) for i in range(1, 11)], "Preguntas")
 dbutils.widgets.dropdown("categoria", "Todas", [
     "Todas", "Geografía", "Matemáticas", "Programación", "Ciencia", "Databricks", "Spark"
@@ -40,11 +41,13 @@ dbutils.widgets.dropdown("categoria", "Todas", [
 dbutils.widgets.dropdown("dificultad", "Todas", ["Todas", "Fácil", "Medio"], "Dificultad")
 
 jugador = dbutils.widgets.get("jugador").strip() or "Jugador"
+modo = dbutils.widgets.get("modo")
 numero_preguntas = int(dbutils.widgets.get("numero_preguntas"))
 categoria = dbutils.widgets.get("categoria")
 dificultad = dbutils.widgets.get("dificultad")
 
 print(f"Jugador: {jugador}")
+print(f"Modo: {modo}")
 print(f"Número de preguntas: {numero_preguntas}")
 print(f"Categoría: {categoria}")
 print(f"Dificultad: {dificultad}")
@@ -100,6 +103,8 @@ CREATE TABLE IF NOT EXISTS {RESULTS_TABLE} (
 )
 USING DELTA
 """)
+
+spark.sql(f"ALTER TABLE {RESULTS_TABLE} ADD COLUMNS (categoria STRING, dificultad STRING)")
 
 # COMMAND ----------
 
@@ -227,7 +232,10 @@ def jugar_interactivo():
     display(titulo, pregunta_html, opciones, boton, salida)
 
 
-jugar_interactivo()
+if modo == "interactivo":
+    jugar_interactivo()
+else:
+    print("Ejecución de Job completada.")
 
 # COMMAND ----------
 
