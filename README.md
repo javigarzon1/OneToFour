@@ -1,23 +1,73 @@
 # OneToFour
 
-Juego de preguntas y respuestas desarrollado en Python para ejecutarse en Databricks.
+Proyecto de preguntas y respuestas desarrollado con Python, PySpark y Databricks.
 
-## Características
-- 4 opciones por pregunta y una única respuesta correcta.
-- Preguntas almacenadas en una tabla Delta.
-- Orden aleatorio de preguntas.
-- Puntuación automática.
-- Registro de resultados de cada partida.
-- Notebook preparado para Databricks.
+La idea es sencilla: presentar una serie de preguntas con cuatro opciones, comprobar la respuesta seleccionada y guardar el resultado de cada partida.
 
-## Estructura
-- `notebooks/OneToFour.py`: notebook principal para Databricks.
-- `data/preguntas.csv`: banco inicial de preguntas.
-- `sql/01_crear_tablas.sql`: creación de tablas Delta.
-- `requirements.txt`: dependencias externas.
+## ¿Cómo funciona?
 
-## Ejecución
-1. Importa `notebooks/OneToFour.py` como notebook en Databricks.
-2. Ejecuta las celdas en orden.
-3. Introduce A, B, C o D durante la partida.
-4. Los resultados se guardan en `quiz.resultados`.
+1. Se crea el esquema `quiz`.
+2. Se carga el banco de preguntas en una tabla Delta.
+3. Se seleccionan preguntas de forma aleatoria.
+4. El jugador responde con A, B, C o D.
+5. Se calcula la puntuación.
+6. La partida queda registrada para poder consultar resultados posteriores.
+
+## Estructura del proyecto
+
+```
+OneToFour/
+├── data/
+│   └── preguntas.csv
+├── notebooks/
+│   └── OneToFour.py
+├── sql/
+│   └── 01_crear_tablas.sql
+├── requirements.txt
+└── README.md
+```
+
+## Tecnologías
+
+- Python
+- PySpark
+- Databricks
+- Delta Lake
+- SQL
+
+## Ejecutarlo en Databricks
+
+Importar `notebooks/OneToFour.py` como notebook y ejecutar las celdas en orden.
+
+El juego utiliza la tabla `quiz.preguntas` para obtener las preguntas y `quiz.resultados` para almacenar las partidas.
+
+## Datos
+
+El proyecto incluye un pequeño conjunto inicial de preguntas en `data/preguntas.csv`. Se puede ampliar fácilmente añadiendo nuevas preguntas, categorías y niveles de dificultad.
+
+## Tablas
+
+### quiz.preguntas
+
+Contiene el banco de preguntas:
+
+- `id`
+- `pregunta`
+- `opcion_a`
+- `opcion_b`
+- `opcion_c`
+- `opcion_d`
+- `correcta`
+- `categoria`
+- `dificultad`
+
+### quiz.resultados
+
+Guarda el resultado de cada partida:
+
+- `partida_id`
+- `jugador`
+- `fecha`
+- `puntuacion`
+- `total_preguntas`
+- `porcentaje`
