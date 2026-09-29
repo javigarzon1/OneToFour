@@ -1,5 +1,7 @@
 # OneToFour
 
+**Autor: javigarzon1**
+
 Proyecto de preguntas y respuestas desarrollado con Python, PySpark y Databricks.
 
 La idea es sencilla: presentar una serie de preguntas con cuatro opciones, comprobar la respuesta seleccionada y guardar el resultado de cada partida.
