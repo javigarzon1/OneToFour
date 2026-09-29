@@ -1,0 +1,47 @@
+{
+  "name": "OneToFour - Partida",
+  "max_concurrent_runs": 1,
+  "parameters": [
+    {
+      "name": "jugador",
+      "default": "Jugador"
+    },
+    {
+      "name": "numero_preguntas",
+      "default": "5"
+    },
+    {
+      "name": "categoria",
+      "default": "Todas"
+    },
+    {
+      "name": "dificultad",
+      "default": "Todas"
+    }
+  ],
+  "tasks": [
+    {
+      "task_key": "one_to_four",
+      "notebook_task": {
+        "notebook_path": "/Workspace/Repos/javigarzon1/OneToFour/notebooks/OneToFour.py",
+        "base_parameters": {
+          "jugador": "{{job.parameters.jugador}}",
+          "numero_preguntas": "{{job.parameters.numero_preguntas}}",
+          "categoria": "{{job.parameters.categoria}}",
+          "dificultad": "{{job.parameters.dificultad}}"
+        }
+      },
+      "job_cluster_key": "one_to_four_cluster"
+    }
+  ],
+  "job_clusters": [
+    {
+      "job_cluster_key": "one_to_four_cluster",
+      "new_cluster": {
+        "spark_version": "15.4.x-scala2.12",
+        "node_type_id": "Standard_DS3_v2",
+        "num_workers": 1
+      }
+    }
+  ]
+}
