@@ -39,14 +39,28 @@ jobs:
 
       - name: Check Databricks through API
         run: |
-          response=$(curl --silent --show-error --fail http://127.0.0.1:8000/api/health/databricks)
+          set +e
+          response=$(curl --silent --show-error --fail-with-body http://127.0.0.1:8000/api/health/databricks)
+          status=$?
+          echo "HTTP/API exit code: $status"
+          echo "Respuesta de Databricks:"
           echo "$response"
+          if [ $status -ne 0 ]; then
+            echo "La comprobación de Databricks ha fallado. El mensaje anterior contiene el detalle sin mostrar el token."
+            exit $status
+          fi
           echo "$response" | grep -q '"databricks":true'
 
       - name: Check questions endpoint
         run: |
-          response=$(curl --silent --show-error --fail "http://127.0.0.1:8000/api/questions?limit=1")
+          set +e
+          response=$(curl --silent --show-error --fail-with-body "http://127.0.0.1:8000/api/questions?limit=1")
+          status=$?
+          echo "HTTP/API exit code: $status"
           echo "$response"
+          if [ $status -ne 0 ]; then
+            exit $status
+          fi
           echo "$response" | grep -q '"pregunta"'
 
       - name: Show API logs on failure
