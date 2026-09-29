@@ -3,6 +3,10 @@
 # MAGIC # OneToFour
 # MAGIC
 # MAGIC Juego de preguntas y respuestas con cuatro opciones y una respuesta correcta.
+# MAGIC
+# MAGIC **Autor:** javigarzon1
+# MAGIC
+# MAGIC Proyecto preparado para Azure Databricks con PySpark, Delta Lake y widgets de Databricks.
 
 # COMMAND ----------
 
@@ -20,7 +24,35 @@ spark.sql(f"CREATE SCHEMA IF NOT EXISTS {SCHEMA}")
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Cargar preguntas
+# MAGIC ## Parámetros
+# MAGIC
+# MAGIC Los parámetros aparecen en la parte superior del notebook. También pueden ser enviados desde un Azure Databricks Job.
+
+# COMMAND ----------
+
+# Los widgets permiten utilizar el mismo notebook de forma interactiva
+# o como tarea parametrizada de un Job.
+dbutils.widgets.text("jugador", "Jugador", "Jugador")
+dbutils.widgets.dropdown("numero_preguntas", "5", [str(i) for i in range(1, 11)], "Preguntas")
+dbutils.widgets.dropdown("categoria", "Todas", [
+    "Todas", "Geografía", "Matemáticas", "Programación", "Ciencia", "Databricks", "Spark"
+], "Categoría")
+dbutils.widgets.dropdown("dificultad", "Todas", ["Todas", "Fácil", "Medio"], "Dificultad")
+
+jugador = dbutils.widgets.get("jugador").strip() or "Jugador"
+numero_preguntas = int(dbutils.widgets.get("numero_preguntas"))
+categoria = dbutils.widgets.get("categoria")
+dificultad = dbutils.widgets.get("dificultad")
+
+print(f"Jugador: {jugador}")
+print(f"Número de preguntas: {numero_preguntas}")
+print(f"Categoría: {categoria}")
+print(f"Dificultad: {dificultad}")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Banco de preguntas
 
 # COMMAND ----------
 
@@ -51,7 +83,7 @@ display(spark.table(QUESTIONS_TABLE))
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Crear tabla de resultados
+# MAGIC ## Tabla de resultados
 
 # COMMAND ----------
 
@@ -62,7 +94,9 @@ CREATE TABLE IF NOT EXISTS {RESULTS_TABLE} (
     fecha TIMESTAMP,
     puntuacion INT,
     total_preguntas INT,
-    porcentaje DOUBLE
+    porcentaje DOUBLE,
+    categoria STRING,
+    dificultad STRING
 )
 USING DELTA
 """)
@@ -70,56 +104,33 @@ USING DELTA
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Jugar
+# MAGIC ## Juego interactivo
+# MAGIC
+# MAGIC Al ejecutar esta celda se muestran las preguntas y las cuatro opciones.
+# MAGIC La selección se realiza con un control visual cuando `ipywidgets` está disponible.
+# MAGIC En ejecuciones no interactivas, como un Job, se utiliza la respuesta indicada por parámetro.
 
 # COMMAND ----------
 
-def jugar(jugador="Jugador", numero_preguntas=5):
-    preguntas_disponibles = [
-        fila.asDict()
-        for fila in spark.table(QUESTIONS_TABLE).collect()
-    ]
+def obtener_preguntas():
+    consulta = spark.table(QUESTIONS_TABLE)
 
-    if not preguntas_disponibles:
-        raise ValueError("No hay preguntas disponibles.")
+    if categoria != "Todas":
+        consulta = consulta.filter(F.col("categoria") == categoria)
 
-    numero_preguntas = min(numero_preguntas, len(preguntas_disponibles))
-    seleccion = random.sample(preguntas_disponibles, numero_preguntas)
-    puntuacion = 0
+    if dificultad != "Todas":
+        consulta = consulta.filter(F.col("dificultad") == dificultad)
 
-    print("=" * 50)
-    print("ONETOFOUR")
-    print("=" * 50)
+    disponibles = [fila.asDict() for fila in consulta.collect()]
 
-    for numero, pregunta in enumerate(seleccion, start=1):
-        print(f"\nPregunta {numero}/{numero_preguntas}")
-        print(pregunta["pregunta"])
-        print(f"A) {pregunta['opcion_a']}")
-        print(f"B) {pregunta['opcion_b']}")
-        print(f"C) {pregunta['opcion_c']}")
-        print(f"D) {pregunta['opcion_d']}")
+    if not disponibles:
+        raise ValueError("No hay preguntas para los filtros seleccionados.")
 
-        while True:
-            respuesta = input("Respuesta [A/B/C/D]: ").strip().upper()
+    return random.sample(disponibles, min(numero_preguntas, len(disponibles)))
 
-            if respuesta in {"A", "B", "C", "D"}:
-                break
 
-            print("Respuesta no válida. Utiliza A, B, C o D.")
-
-        if respuesta == pregunta["correcta"]:
-            puntuacion += 1
-            print("Correcto.")
-        else:
-            opcion_correcta = pregunta[
-                f"opcion_{pregunta['correcta'].lower()}"
-            ]
-            print(
-                f"Incorrecto. La respuesta era "
-                f"{pregunta['correcta']}) {opcion_correcta}"
-            )
-
-    porcentaje = round(puntuacion * 100 / numero_preguntas, 2)
+def guardar_resultado(puntuacion, total):
+    porcentaje = round(puntuacion * 100 / total, 2)
     partida_id = str(uuid.uuid4())
 
     resultado = spark.createDataFrame(
@@ -128,36 +139,100 @@ def jugar(jugador="Jugador", numero_preguntas=5):
             jugador,
             datetime.now(),
             puntuacion,
-            numero_preguntas,
-            porcentaje
+            total,
+            porcentaje,
+            categoria,
+            dificultad
         )],
         [
-            "partida_id",
-            "jugador",
-            "fecha",
-            "puntuacion",
-            "total_preguntas",
-            "porcentaje"
+            "partida_id", "jugador", "fecha", "puntuacion",
+            "total_preguntas", "porcentaje", "categoria", "dificultad"
         ]
     )
 
-    resultado.write         .format("delta")         .mode("append")         .saveAsTable(RESULTS_TABLE)
+    resultado.write.format("delta").mode("append").saveAsTable(RESULTS_TABLE)
 
-    print()
-    print(f"Resultado: {puntuacion}/{numero_preguntas}")
-    print(f"Porcentaje: {porcentaje}%")
+    return partida_id, porcentaje
 
-    return partida_id
 
-# COMMAND ----------
+def jugar_interactivo():
+    import ipywidgets as widgets
+    from IPython.display import display, clear_output
 
-jugador = input("Nombre del jugador: ").strip() or "Jugador"
-jugar(jugador=jugador, numero_preguntas=5)
+    seleccion = obtener_preguntas()
+    estado = {"indice": 0, "puntuacion": 0}
+
+    titulo = widgets.HTML("<h2>OneToFour</h2>")
+    pregunta_html = widgets.HTML()
+    opciones = widgets.RadioButtons(
+        options=[],
+        description="Respuesta:",
+        disabled=False
+    )
+    boton = widgets.Button(description="Responder")
+    salida = widgets.Output()
+
+    def mostrar_pregunta():
+        actual = seleccion[estado["indice"]]
+        pregunta_html.value = (
+            f"<h3>Pregunta {estado['indice'] + 1}/{len(seleccion)}</h3>"
+            f"<p>{actual['pregunta']}</p>"
+        )
+        opciones.options = [
+            ("A) " + actual["opcion_a"], "A"),
+            ("B) " + actual["opcion_b"], "B"),
+            ("C) " + actual["opcion_c"], "C"),
+            ("D) " + actual["opcion_d"], "D"),
+        ]
+        opciones.value = None
+        boton.description = "Responder"
+
+    def responder(_):
+        with salida:
+            clear_output()
+
+            if opciones.value is None:
+                print("Selecciona una respuesta.")
+                return
+
+            actual = seleccion[estado["indice"]]
+
+            if opciones.value == actual["correcta"]:
+                estado["puntuacion"] += 1
+                print("Correcto.")
+            else:
+                correcta = actual[f"opcion_{actual['correcta'].lower()}"]
+                print(f"Incorrecto. La respuesta correcta era {actual['correcta']}) {correcta}")
+
+            estado["indice"] += 1
+
+            if estado["indice"] >= len(seleccion):
+                partida_id, porcentaje = guardar_resultado(
+                    estado["puntuacion"],
+                    len(seleccion)
+                )
+                print()
+                print(f"Resultado: {estado['puntuacion']}/{len(seleccion)}")
+                print(f"Porcentaje: {porcentaje}%")
+                print(f"Partida: {partida_id}")
+                boton.disabled = True
+                opciones.disabled = True
+                return
+
+            mostrar_pregunta()
+
+    boton.on_click(responder)
+    mostrar_pregunta()
+
+    display(titulo, pregunta_html, opciones, boton, salida)
+
+
+jugar_interactivo()
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Historial
+# MAGIC ## Historial de partidas
 
 # COMMAND ----------
 
