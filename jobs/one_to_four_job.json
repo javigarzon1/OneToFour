@@ -28,7 +28,8 @@
           "jugador": "{{job.parameters.jugador}}",
           "numero_preguntas": "{{job.parameters.numero_preguntas}}",
           "categoria": "{{job.parameters.categoria}}",
-          "dificultad": "{{job.parameters.dificultad}}"
+          "dificultad": "{{job.parameters.dificultad}}",
+          "modo": "{{job.parameters.modo}}"
         }
       },
       "job_cluster_key": "one_to_four_cluster"
