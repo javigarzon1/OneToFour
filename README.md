@@ -73,3 +73,64 @@ Guarda el resultado de cada partida:
 - `puntuacion`
 - `total_preguntas`
 - `porcentaje`
+
+## Frontend
+
+OneToFour incluye un frontend web desarrollado con **Vue 3 + Vite + Vue Router**.
+
+La aplicación permite:
+
+- Iniciar una partida.
+- Elegir número de preguntas.
+- Filtrar por categoría y dificultad.
+- Responder mediante una interfaz visual.
+- Ver la puntuación final.
+- Consultar el ranking.
+- Trabajar en modo demo mientras el backend todavía no está conectado.
+
+La estructura del frontend se encuentra en `frontend/`.
+
+### Ejecutar el frontend
+
+Desde la carpeta `frontend`:
+
+```bash
+npm install
+npm run dev
+```
+
+Por defecto se abrirá en el puerto 5173.
+
+### Conexión con el backend
+
+El frontend no accede directamente a las tablas Delta. La comunicación está encapsulada en `frontend/src/services/api.js`.
+
+Cuando se despliegue la API, se puede configurar:
+
+```text
+VITE_API_URL=https://tu-api
+```
+
+Los endpoints previstos son:
+
+- `GET /api/questions`
+- `POST /api/games`
+- `GET /api/ranking`
+
+La arquitectura queda:
+
+```
+Vue 3
+  │
+  ▼
+API
+  │
+  ▼
+Azure Databricks
+  │
+  ▼
+PySpark / Delta Lake
+  │
+  ├── quiz.preguntas
+  └── quiz.resultados
+```
