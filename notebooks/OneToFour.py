@@ -1,7 +1,8 @@
 # Databricks notebook source
 # MAGIC %md
 # MAGIC # OneToFour
-# MAGIC Juego de preguntas y respuestas: 4 opciones, una única correcta.
+# MAGIC
+# MAGIC Juego de preguntas y respuestas con cuatro opciones y una respuesta correcta.
 
 # COMMAND ----------
 
@@ -18,6 +19,11 @@ spark.sql(f"CREATE SCHEMA IF NOT EXISTS {SCHEMA}")
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC ## Cargar preguntas
+
+# COMMAND ----------
+
 preguntas = [
     (1, "¿Cuál es la capital de España?", "Madrid", "Sevilla", "Valencia", "Bilbao", "A", "Geografía", "Fácil"),
     (2, "¿Cuánto es 5 × 6?", "25", "30", "35", "40", "B", "Matemáticas", "Fácil"),
@@ -31,9 +37,21 @@ preguntas = [
     (10, "¿Cuál es el símbolo usado para comentarios de una línea en Python?", "//", "#", "<!--", "-->", "B", "Programación", "Fácil"),
 ]
 
-columns = ["id", "pregunta", "opcion_a", "opcion_b", "opcion_c", "opcion_d", "correcta", "categoria", "dificultad"]
+columnas = [
+    "id", "pregunta", "opcion_a", "opcion_b", "opcion_c",
+    "opcion_d", "correcta", "categoria", "dificultad"
+]
 
-spark.createDataFrame(preguntas, columns).write.format("delta").mode("overwrite").option("overwriteSchema", "true").saveAsTable(QUESTIONS_TABLE)
+df_preguntas = spark.createDataFrame(preguntas, columnas)
+
+df_preguntas.write     .format("delta")     .mode("overwrite")     .option("overwriteSchema", "true")     .saveAsTable(QUESTIONS_TABLE)
+
+display(spark.table(QUESTIONS_TABLE))
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Crear tabla de resultados
 
 # COMMAND ----------
 
@@ -45,13 +63,23 @@ CREATE TABLE IF NOT EXISTS {RESULTS_TABLE} (
     puntuacion INT,
     total_preguntas INT,
     porcentaje DOUBLE
-) USING DELTA
+)
+USING DELTA
 """)
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC ## Jugar
+
+# COMMAND ----------
+
 def jugar(jugador="Jugador", numero_preguntas=5):
-    preguntas_disponibles = [r.asDict() for r in spark.table(QUESTIONS_TABLE).collect()]
+    preguntas_disponibles = [
+        fila.asDict()
+        for fila in spark.table(QUESTIONS_TABLE).collect()
+    ]
+
     if not preguntas_disponibles:
         raise ValueError("No hay preguntas disponibles.")
 
@@ -59,39 +87,66 @@ def jugar(jugador="Jugador", numero_preguntas=5):
     seleccion = random.sample(preguntas_disponibles, numero_preguntas)
     puntuacion = 0
 
-    print("=" * 60)
+    print("=" * 50)
     print("ONETOFOUR")
-    print("=" * 60)
+    print("=" * 50)
 
-    for numero, p in enumerate(seleccion, start=1):
-        print(f"\nPregunta {numero}/{numero_preguntas}: {p['pregunta']}")
-        print(f"A) {p['opcion_a']}")
-        print(f"B) {p['opcion_b']}")
-        print(f"C) {p['opcion_c']}")
-        print(f"D) {p['opcion_d']}")
+    for numero, pregunta in enumerate(seleccion, start=1):
+        print(f"\nPregunta {numero}/{numero_preguntas}")
+        print(pregunta["pregunta"])
+        print(f"A) {pregunta['opcion_a']}")
+        print(f"B) {pregunta['opcion_b']}")
+        print(f"C) {pregunta['opcion_c']}")
+        print(f"D) {pregunta['opcion_d']}")
 
         while True:
             respuesta = input("Respuesta [A/B/C/D]: ").strip().upper()
+
             if respuesta in {"A", "B", "C", "D"}:
                 break
-            print("Introduce solamente A, B, C o D.")
 
-        if respuesta == p["correcta"]:
+            print("Respuesta no válida. Utiliza A, B, C o D.")
+
+        if respuesta == pregunta["correcta"]:
             puntuacion += 1
-            print("✓ Correcto")
+            print("Correcto.")
         else:
-            correcta = p[f"opcion_{p['correcta'].lower()}"]
-            print(f"✗ Incorrecto. Respuesta correcta: {p['correcta']}) {correcta}")
+            opcion_correcta = pregunta[
+                f"opcion_{pregunta['correcta'].lower()}"
+            ]
+            print(
+                f"Incorrecto. La respuesta era "
+                f"{pregunta['correcta']}) {opcion_correcta}"
+            )
 
     porcentaje = round(puntuacion * 100 / numero_preguntas, 2)
     partida_id = str(uuid.uuid4())
 
-    spark.createDataFrame(
-        [(partida_id, jugador, datetime.now(), puntuacion, numero_preguntas, porcentaje)],
-        ["partida_id", "jugador", "fecha", "puntuacion", "total_preguntas", "porcentaje"]
-    ).write.format("delta").mode("append").saveAsTable(RESULTS_TABLE)
+    resultado = spark.createDataFrame(
+        [(
+            partida_id,
+            jugador,
+            datetime.now(),
+            puntuacion,
+            numero_preguntas,
+            porcentaje
+        )],
+        [
+            "partida_id",
+            "jugador",
+            "fecha",
+            "puntuacion",
+            "total_preguntas",
+            "porcentaje"
+        ]
+    )
 
-    print(f"\nResultado: {puntuacion}/{numero_preguntas} ({porcentaje}%)")
+    resultado.write         .format("delta")         .mode("append")         .saveAsTable(RESULTS_TABLE)
+
+    print()
+    print(f"Resultado: {puntuacion}/{numero_preguntas}")
+    print(f"Porcentaje: {porcentaje}%")
+
     return partida_id
 
 # COMMAND ----------
@@ -101,11 +156,24 @@ jugar(jugador=jugador, numero_preguntas=5)
 
 # COMMAND ----------
 
-display(spark.table(RESULTS_TABLE).orderBy(F.col("fecha").desc()))
+# MAGIC %md
+# MAGIC ## Historial
 
 # COMMAND ----------
 
 display(
+    spark.table(RESULTS_TABLE)
+    .orderBy(F.col("fecha").desc())
+)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Estadísticas
+
+# COMMAND ----------
+
+estadisticas = (
     spark.table(RESULTS_TABLE)
     .groupBy("jugador")
     .agg(
@@ -115,3 +183,5 @@ display(
     )
     .orderBy(F.col("mejor_puntuacion").desc())
 )
+
+display(estadisticas)
