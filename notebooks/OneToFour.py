@@ -15,11 +15,12 @@ import random
 import uuid
 from datetime import datetime
 
+CATALOG = "workspace"
 SCHEMA = "quiz"
-QUESTIONS_TABLE = f"{SCHEMA}.preguntas"
-RESULTS_TABLE = f"{SCHEMA}.resultados"
+QUESTIONS_TABLE = f"{CATALOG}.{SCHEMA}.preguntas"
+RESULTS_TABLE = f"{CATALOG}.{SCHEMA}.resultados"
 
-spark.sql(f"CREATE SCHEMA IF NOT EXISTS {SCHEMA}")
+spark.sql(f"CREATE SCHEMA IF NOT EXISTS {CATALOG}.{SCHEMA}")
 
 # COMMAND ----------
 
