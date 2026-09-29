@@ -2,56 +2,85 @@
 
 **Autor: Javi Garzón**
 
-Proyecto de preguntas y respuestas desarrollado con Python, PySpark y Databricks.
+Juego de preguntas y respuestas con cuatro opciones, desarrollado con **Vue 3**, **FastAPI**, **Python**, **Azure Databricks** y **Delta Lake**.
 
-La idea es sencilla: presentar una serie de preguntas con cuatro opciones, comprobar la respuesta seleccionada y guardar el resultado de cada partida.
+## Arquitectura
 
-## ¿Cómo funciona?
+~~~text
+Vue 3 + Vite
+      │
+      │ HTTP/JSON
+      ▼
+FastAPI
+      │
+      │ Databricks SQL Connector
+      ▼
+Azure Databricks SQL Warehouse
+      │
+      ▼
+Delta Lake
+      ├── quiz.preguntas
+      └── quiz.resultados
+~~~
 
-1. Se crea el esquema `quiz`.
-2. Se carga el banco de preguntas en una tabla Delta.
-3. Se seleccionan preguntas de forma aleatoria.
-4. El jugador responde con A, B, C o D.
-5. Se calcula la puntuación.
-6. La partida queda registrada para poder consultar resultados posteriores.
+El navegador nunca recibe las credenciales de Databricks. El backend mantiene esas credenciales en variables de entorno y realiza las consultas contra el SQL Warehouse.
 
-## Estructura del proyecto
+## Funcionalidades
 
-```
+- Inicio de partidas con nombre del jugador.
+- Selección del número de preguntas.
+- Filtros por categoría y dificultad.
+- Cuatro respuestas por pregunta.
+- Puntuación automática.
+- Persistencia de cada partida en Delta Lake.
+- Ranking de mejores resultados.
+- API REST documentada automáticamente por FastAPI.
+- Endpoint de comprobación de conexión con Databricks.
+- Modo demo del frontend si `VITE_API_URL` está vacío.
+
+## Estructura
+
+~~~text
 OneToFour/
+├── backend/
+│   ├── app/
+│   │   └── main.py
+│   ├── .env.example
+│   ├── .gitignore
+│   ├── README.md
+│   └── requirements.txt
+├── frontend/
+│   ├── src/
+│   │   ├── components/
+│   │   ├── router/
+│   │   ├── services/
+│   │   ├── views/
+│   │   ├── App.vue
+│   │   └── main.js
+│   ├── .env.example
+│   ├── index.html
+│   ├── package.json
+│   └── vite.config.js
 ├── data/
 │   └── preguntas.csv
 ├── notebooks/
 │   └── OneToFour.py
 ├── sql/
 │   └── 01_crear_tablas.sql
-├── requirements.txt
-└── README.md
-```
+├── jobs/
+│   └── one_to_four_job.json
+└── requirements.txt
+~~~
 
-## Tecnologías
+## 1. Preparar Azure Databricks
 
-- Python
-- PySpark
-- Databricks
-- Delta Lake
-- SQL
+Ejecuta `sql/01_crear_tablas.sql` en un SQL Warehouse de Azure Databricks.
 
-## Ejecutarlo en Databricks
+Después carga las preguntas de `data/preguntas.csv` en `quiz.preguntas`, o ejecuta el notebook `notebooks/OneToFour.py` para preparar el banco de preguntas.
 
-Importar `notebooks/OneToFour.py` como notebook y ejecutar las celdas en orden.
-
-El juego utiliza la tabla `quiz.preguntas` para obtener las preguntas y `quiz.resultados` para almacenar las partidas.
-
-## Datos
-
-El proyecto incluye un pequeño conjunto inicial de preguntas en `data/preguntas.csv`. Se puede ampliar fácilmente añadiendo nuevas preguntas, categorías y niveles de dificultad.
-
-## Tablas
+Las tablas utilizadas son:
 
 ### quiz.preguntas
-
-Contiene el banco de preguntas:
 
 - `id`
 - `pregunta`
@@ -65,8 +94,6 @@ Contiene el banco de preguntas:
 
 ### quiz.resultados
 
-Guarda el resultado de cada partida:
-
 - `partida_id`
 - `jugador`
 - `fecha`
@@ -74,63 +101,109 @@ Guarda el resultado de cada partida:
 - `total_preguntas`
 - `porcentaje`
 
-## Frontend
+## 2. Arrancar la API
 
-OneToFour incluye un frontend web desarrollado con **Vue 3 + Vite + Vue Router**.
+Desde `backend/`:
 
-La aplicación permite:
+~~~bash
+python -m venv .venv
+# Windows
+.venv\\Scripts\\activate
+# Linux/macOS
+source .venv/bin/activate
 
-- Iniciar una partida.
-- Elegir número de preguntas.
-- Filtrar por categoría y dificultad.
-- Responder mediante una interfaz visual.
-- Ver la puntuación final.
-- Consultar el ranking.
-- Trabajar en modo demo mientras el backend todavía no está conectado.
+pip install -r requirements.txt
+~~~
 
-La estructura del frontend se encuentra en `frontend/`.
+Copia `.env.example` a `.env` y completa:
 
-### Ejecutar el frontend
+~~~text
+DATABRICKS_SERVER_HOSTNAME=...
+DATABRICKS_HTTP_PATH=...
+DATABRICKS_TOKEN=...
+CORS_ORIGINS=http://localhost:5173
+~~~
 
-Desde la carpeta `frontend`:
+Arranca:
 
-```bash
+~~~bash
+uvicorn app.main:app --reload --port 8000
+~~~
+
+Comprobaciones:
+
+- `http://localhost:8000/health`
+- `http://localhost:8000/api/health/databricks`
+- `http://localhost:8000/docs`
+
+## 3. Arrancar Vue 3
+
+Desde `frontend/`:
+
+~~~bash
 npm install
+~~~
+
+Copia `.env.example` a `.env`:
+
+~~~text
+VITE_API_URL=http://localhost:8000
+~~~
+
+Y ejecuta:
+
+~~~bash
 npm run dev
-```
+~~~
 
-Por defecto se abrirá en el puerto 5173.
+Abre el frontend en `http://localhost:5173`.
 
-### Conexión con el backend
+## Endpoints de la API
 
-El frontend no accede directamente a las tablas Delta. La comunicación está encapsulada en `frontend/src/services/api.js`.
+### Obtener preguntas
 
-Cuando se despliegue la API, se puede configurar:
+~~~text
+GET /api/questions?categoria=Programación&dificultad=Medio&limit=10
+~~~
 
-```text
-VITE_API_URL=https://tu-api
-```
+### Guardar una partida
 
-Los endpoints previstos son:
+~~~text
+POST /api/games
+Content-Type: application/json
+~~~
 
-- `GET /api/questions`
-- `POST /api/games`
-- `GET /api/ranking`
+~~~json
+{
+  "jugador": "Javi",
+  "puntuacion": 8,
+  "total_preguntas": 10,
+  "porcentaje": 80
+}
+~~~
 
-La arquitectura queda:
+### Ranking
 
-```
-Vue 3
-  │
-  ▼
-API
-  │
-  ▼
-Azure Databricks
-  │
-  ▼
-PySpark / Delta Lake
-  │
-  ├── quiz.preguntas
-  └── quiz.resultados
-```
+~~~text
+GET /api/ranking
+~~~
+
+## Seguridad
+
+- Las credenciales de Databricks solo existen en el backend.
+- `.env` está excluido de Git.
+- Los filtros y valores de escritura se envían como parámetros SQL.
+- Para producción, utiliza OAuth/M2M con un service principal en lugar de depender de un token personal.
+
+## Tecnologías
+
+- Vue 3
+- Vite
+- Vue Router
+- FastAPI
+- Python
+- Databricks SQL Connector
+- Azure Databricks
+- SQL Warehouse
+- Delta Lake
+- PySpark
