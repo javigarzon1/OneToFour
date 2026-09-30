@@ -12,6 +12,7 @@ async function submit(){
   try{
     const fn=mode.value==='register'?register:login
     await fn({usuario:usuario.value.trim(),password:password.value})
+    window.dispatchEvent(new Event('auth-changed'))
     router.push(String(route.query.redirect||'/'))
   }catch(e){error.value=e.message}finally{loading.value=false}
 }
