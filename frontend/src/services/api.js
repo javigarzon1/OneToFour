@@ -37,3 +37,27 @@ export async function getRanking(){
   if(!API_URL)return demoRanking
   return request('/api/ranking')
 }
+
+export async function getStats(){
+  if(!API_URL){
+    return {
+      summary:[{partidas:12,jugadores:7,porcentaje_medio:76.5,mejor_puntuacion:12}],
+      categories:[
+        {categoria:'Programación',partidas:5,porcentaje_medio:82,mejor_porcentaje:100},
+        {categoria:'Geografía',partidas:3,porcentaje_medio:78,mejor_porcentaje:100},
+        {categoria:'Databricks',partidas:2,porcentaje_medio:71,mejor_porcentaje:100},
+        {categoria:'Ciencia',partidas:2,porcentaje_medio:68,mejor_porcentaje:80}
+      ],
+      difficulties:[
+        {dificultad:'Fácil',partidas:6,porcentaje_medio:84},
+        {dificultad:'Medio',partidas:4,porcentaje_medio:74},
+        {dificultad:'Difícil',partidas:2,porcentaje_medio:59}
+      ],
+      recent:[
+        {jugador:'Ana',puntuacion:12,total_preguntas:12,porcentaje:100,categoria:'Mixto',dificultad:'Todas',fecha:'Hoy'},
+        {jugador:'Carlos',puntuacion:8,total_preguntas:10,porcentaje:80,categoria:'Programación',dificultad:'Medio',fecha:'Ayer'}
+      ]
+    }
+  }
+  return request('/api/stats')
+}
