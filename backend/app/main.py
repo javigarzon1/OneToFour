@@ -152,11 +152,12 @@ def generate_quiz(request: GenerateQuizRequest):
 def get_questions(
     categoria: str | None = Query(default=None, max_length=50),
     dificultad: str | None = Query(default=None, max_length=30),
+    modo: str = Query(default="normal", pattern="^(normal|aleatorio)$"),
     limit: int = Query(default=20, ge=1, le=100),
 ):
     filters = []
     params = []
-    if categoria and categoria != "Todas":
+    if modo == "normal" and categoria and categoria not in ("Todas", "Aleatorio"):
         filters.append("categoria = ?")
         params.append(categoria)
     if dificultad and dificultad != "Todas":
