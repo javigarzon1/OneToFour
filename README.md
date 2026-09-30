@@ -31,6 +31,7 @@ El navegador nunca recibe las credenciales de Databricks. El backend mantiene es
 - Puntuación por dificultad y sistema de rachas.
 - Feedback inmediato con explicación de la respuesta.
 - Página de estadísticas con datos agregados desde Databricks por categoría y dificultad.
+- Agente IA para crear partidas personalizadas por tema, dificultad y número de preguntas.
 - Historial de las últimas partidas.
 
 - Inicio de partidas con nombre del jugador.
@@ -109,6 +110,12 @@ Las tablas utilizadas son:
 - `porcentaje`
 - `categoria`
 - `dificultad`
+
+## Agente IA
+
+El modo **Agente IA** permite seleccionar un tema (Historia, Cine, Ciencia, Deporte, Corazón, Naturaleza y otros), una dificultad y entre 1 y 20 preguntas. FastAPI envía la petición al modelo configurado mediante `OPENAI_API_KEY`, valida la respuesta estructurada y entrega las preguntas al frontend para iniciar la partida.
+
+La clave de OpenAI permanece exclusivamente en el backend. Para habilitarlo localmente añade `OPENAI_API_KEY` y, opcionalmente, `OPENAI_MODEL` en `backend/.env`. En GitHub Actions, configura el secreto `OPENAI_API_KEY`.
 
 ## 2. Arrancar la API
 
