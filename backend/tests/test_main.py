@@ -179,3 +179,34 @@ def test_questions_random_mode_uses_all_topics():
     assert response.status_code == 200
     assert "workspace.quiz.preguntas" in cursor.executed
     assert "ORDER BY rand()" in cursor.executed
+
+
+def test_player_profile():
+    cursors = [
+        FakeCursor(
+            rows=[(4, 28, 10, 100.0, 82.5, 3, 1, 1)],
+            columns=["partidas", "puntos_totales", "mejor_puntuacion", "mejor_porcentaje", "porcentaje_medio", "categorias", "perfectas", "dificiles"],
+        ),
+        FakeCursor(
+            rows=[(10, 10, 100.0, "Ciencia", "Difícil", "2026-09-30")],
+            columns=["puntuacion", "total_preguntas", "porcentaje", "categoria", "dificultad", "fecha"],
+        ),
+    ]
+
+    class ProfileConnection:
+        def cursor(self):
+            return cursors.pop(0)
+        def close(self):
+            pass
+
+    with patch("backend.app.main.get_connection", return_value=ProfileConnection()):
+        response = client.get("/api/player/Javi/profile")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["jugador"] == "Javi"
+    assert body["summary"]["partidas"] == 4
+    assert body["summary"]["porcentaje_medio"] == 82.5
+    assert body["achievements"][0]["desbloqueado"] is True
+    assert body["achievements"][1]["desbloqueado"] is False
+    assert body["recent"][0]["categoria"] == "Ciencia"
