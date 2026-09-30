@@ -261,3 +261,30 @@ También incorpora logros desbloqueables calculados a partir del historial:
 - Una partida en dificultad difícil.
 
 El nombre del jugador se conserva en el navegador para facilitar el acceso al perfil desde el menú **Mi progreso**. El backend expone `GET /api/player/{jugador}/profile` y calcula los datos directamente sobre `workspace.quiz.resultados`.
+
+
+## Banco de preguntas y anti-repetición
+
+OneToFour dispone de 12 bancos independientes en `data/question_banks/`, uno por tema:
+
+Historia, Cine, Ciencia, Deporte, Corazón, Naturaleza, Geografía, Tecnología, Música, Arte, Literatura y Cultura general.
+
+El objetivo es mantener **1.200+ preguntas por categoría**. El agente IA puede completar el catálogo inicial y añadir 100 preguntas nuevas por categoría cada semana. El workflow `.github/workflows/weekly-question-banks.yml` se ejecuta semanalmente y también puede lanzarse manualmente desde GitHub Actions.
+
+Las preguntas se sincronizan con `workspace.quiz.preguntas`. Además, `workspace.quiz.preguntas_usadas` registra las preguntas ya jugadas por cada jugador. El endpoint de preguntas excluye ese historial, por lo que un mismo jugador no vuelve a recibir una pregunta que ya haya completado.
+
+Para inicializar el catálogo:
+
+```bash
+python scripts/generate_question_banks.py --target 1200 --batch-size 100
+python scripts/sync_question_banks.py
+```
+
+Para una actualización semanal equivalente:
+
+```bash
+python scripts/generate_question_banks.py --target 1200 --new-per-topic 100 --batch-size 100
+python scripts/sync_question_banks.py
+```
+
+La generación usa `OPENAI_API_KEY` y `OPENAI_MODEL`; nunca se deben guardar claves en los CSV ni en el repositorio.
