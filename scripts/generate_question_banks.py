@@ -175,10 +175,8 @@ def main() -> None:
         path = BANK_DIR / f"{slug}.csv"
         rows = load_rows(path)
         known = {question_key(row["pregunta"]) for row in rows if row.get("pregunta")}
-        if args.target > 0:
-            needed = max(0, args.target - len(rows))
-        else:
-            needed = args.new_per_topic
+        needed = max(0, args.target - len(rows)) if args.target > 0 else 0
+        needed += args.new_per_topic
 
         added = 0
         while added < needed:
