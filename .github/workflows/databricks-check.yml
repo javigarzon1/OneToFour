@@ -12,6 +12,8 @@ jobs:
       DATABRICKS_SERVER_HOSTNAME: dbc-9ebf13e1-da41.cloud.databricks.com
       DATABRICKS_HTTP_PATH: /sql/1.0/warehouses/7bf58be4bdba98ad
       DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_MODEL: gpt-5.6-luna
       CORS_ORIGINS: http://localhost:5173
 
     steps:
