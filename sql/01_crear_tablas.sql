@@ -56,3 +56,12 @@ UPDATE workspace.quiz.preguntas SET explicacion = CASE id
   WHEN 10 THEN 'En Python, # inicia un comentario de una línea.'
 END
 WHERE id BETWEEN 1 AND 10 AND explicacion IS NULL;
+
+
+CREATE TABLE IF NOT EXISTS workspace.quiz.preguntas_usadas (
+  jugador STRING,
+  pregunta_id INT,
+  partida_id STRING,
+  fecha_uso TIMESTAMP
+)
+USING DELTA;
