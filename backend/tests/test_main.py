@@ -210,3 +210,30 @@ def test_player_profile():
     assert body["achievements"][0]["desbloqueado"] is True
     assert body["achievements"][1]["desbloqueado"] is False
     assert body["recent"][0]["categoria"] == "Ciencia"
+
+
+def test_questions_exclude_player_history():
+    cursor = FakeCursor(rows=[], columns=[])
+    with patch("backend.app.main.get_connection", return_value=FakeConnection(cursor)):
+        response = client.get("/api/questions?jugador=Javi&limit=5")
+    assert response.status_code == 200
+    assert "preguntas_usadas" in cursor.executed
+    assert "LOWER(u.jugador) = LOWER(?)" in cursor.executed
+    assert cursor.params == ["Javi", 5]
+
+
+def test_save_game_records_question_ids():
+    cursor = FakeCursor()
+    with patch("backend.app.main.get_connection", return_value=FakeConnection(cursor)):
+        response = client.post(
+            "/api/games",
+            json={
+                "jugador": "Javi",
+                "puntuacion": 4,
+                "total_preguntas": 2,
+                "porcentaje": 100,
+                "preguntas_ids": [1000001, 1000002],
+            },
+        )
+    assert response.status_code == 200
+    assert "preguntas_usadas" in cursor.executed
