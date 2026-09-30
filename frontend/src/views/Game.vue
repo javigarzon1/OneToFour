@@ -11,7 +11,7 @@ const streak=ref(0),maxStreak=ref(0),timeLeft=ref(15),correctAnswers=ref(0),time
 let timer=null
 
 const player=computed(()=>route.query.jugador||'Jugador')
-const category=computed(()=>route.query.categoria||'Todas')
+const category=computed(()=>route.query.modo==='aleatorio'?'Mixto':(route.query.categoria||'Todas'))
 const difficulty=computed(()=>route.query.dificultad||'Todas')
 const question=computed(()=>questions.value[index.value])
 const total=computed(()=>questions.value.length)
@@ -59,9 +59,26 @@ async function load(){
       questions.value=JSON.parse(stored)
       sessionStorage.removeItem('onetoFour_ai_quiz')
     }else{
-      questions.value=await getQuestions({categoria:route.query.categoria,dificultad:route.query.dificultad})
-      questions.value.sort(()=>Math.random()-.5)
-      questions.value=questions.value.slice(0,Number(route.query.numero||5))
+      const randomMode=route.query.modo==='aleatorio'
+      const requested=Number(route.query.numero||5)
+      const pool=await getQuestions({categoria:randomMode?undefined:route.query.categoria,dificultad:route.query.dificultad,limit:100})
+      if(randomMode){
+        const shuffled=[...pool].sort(()=>Math.random()-.5)
+        const byCategory=new Map()
+        shuffled.forEach(q=>{if(!byCategory.has(q.categoria))byCategory.set(q.categoria,[]);byCategory.get(q.categoria).push(q)})
+        const mixed=[]
+        while(mixed.length<requested && byCategory.size){
+          for(const [category,items] of byCategory){
+            const q=items.shift()
+            if(q)mixed.push(q)
+            if(!items.length)byCategory.delete(category)
+            if(mixed.length===requested)break
+          }
+        }
+        questions.value=mixed
+      }else{
+        questions.value=pool.slice(0,requested)
+      }
     }
     if(!questions.value.length)error.value='No hay preguntas para estos filtros.'
     else startTimer()
