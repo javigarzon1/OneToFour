@@ -203,7 +203,7 @@ def test_player_profile():
             pass
 
     with patch("backend.app.main.get_connection", return_value=ProfileConnection()):
-        response = client.get("/api/player/Javi/profile")
+        response = client.get("/api/player/me/profile")
 
     assert response.status_code == 200
     body = response.json()
