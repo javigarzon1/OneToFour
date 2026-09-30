@@ -171,11 +171,11 @@ def get_questions(
         NOT EXISTS (
             SELECT 1
             FROM workspace.quiz.preguntas_usadas u
-            WHERE u.usuario_id = ?
+            WHERE u.jugador = ?
               AND u.pregunta_id = p.id
         )
     """)
-    params.append(user["sub"])
+    params.append((jugador or "Jugador").strip())
     where = f"WHERE {' AND '.join(filters)}" if filters else ""
     query = f"""
         SELECT p.id, p.pregunta, p.opcion_a, p.opcion_b, p.opcion_c, p.opcion_d,
