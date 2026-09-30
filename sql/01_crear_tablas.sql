@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS workspace.quiz.preguntas (
 )
 USING DELTA;
 
-ALTER TABLE workspace.quiz.preguntas ADD COLUMNS (explicacion STRING);
+ALTER TABLE workspace.quiz.preguntas ADD COLUMNS IF NOT EXISTS (explicacion STRING);
 
 CREATE TABLE IF NOT EXISTS workspace.quiz.resultados (
   partida_id STRING,
