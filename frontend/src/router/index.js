@@ -5,6 +5,7 @@ import Results from '../views/Results.vue'
 import Ranking from '../views/Ranking.vue'
 import Statistics from '../views/Statistics.vue'
 import Agent from '../views/Agent.vue'
+import Profile from '../views/Profile.vue'
 export default createRouter({
   history:createWebHistory(),
   routes:[
@@ -12,6 +13,6 @@ export default createRouter({
     {path:'/jugar',component:Game},
     {path:'/resultado',component:Results},
     {path:'/ranking',component:Ranking},
-    {path:'/estadisticas',component:Statistics},{path:'/agente',component:Agent}
+    {path:'/estadisticas',component:Statistics},{path:'/agente',component:Agent},{path:'/perfil',component:Profile}
   ]
 })
