@@ -27,6 +27,12 @@ El navegador nunca recibe las credenciales de Databricks. El backend mantiene es
 
 ## Funcionalidades
 
+- Temporizador de 15 segundos por pregunta.
+- Puntuación por dificultad y sistema de rachas.
+- Feedback inmediato con explicación de la respuesta.
+- Página de estadísticas con datos agregados desde Databricks por categoría y dificultad.
+- Historial de las últimas partidas.
+
 - Inicio de partidas con nombre del jugador.
 - Selección del número de preguntas.
 - Filtros por categoría y dificultad.
