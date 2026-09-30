@@ -32,6 +32,8 @@ jobs:
         run: python -m py_compile backend/app/main.py
 
       - name: Run backend tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
         run: pytest -q backend/tests
 
       - name: Build frontend
@@ -76,4 +78,9 @@ jobs:
 
       - name: Show API logs on failure
         if: failure()
-        run: cat /tmp/onetoFour-api.log
+        run: |
+          if [ -f /tmp/onetoFour-api.log ]; then
+            cat /tmp/onetoFour-api.log
+          else
+            echo "No hay log de FastAPI porque el servidor todavía no llegó a arrancar."
+          fi
