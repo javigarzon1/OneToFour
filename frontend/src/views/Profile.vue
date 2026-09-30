@@ -1,8 +1,8 @@
 <script setup>
 import {computed,onMounted,ref} from 'vue'
-import {getPlayerProfile,getAuthenticatedUser} from '../services/api'
+import {getPlayerProfile,getPlayer,setPlayer} from '../services/api'
 
-const jugador=ref(getAuthenticatedUser()?.usuario||'')
+const jugador=ref(getPlayer())
 const data=ref(null),loading=ref(false),error=ref('')
 
 const unlocked=computed(()=>data.value?.achievements?.filter(a=>a.desbloqueado).length||0)
@@ -10,10 +10,12 @@ const totalAchievements=computed(()=>data.value?.achievements?.length||0)
 const progress=computed(()=>totalAchievements.value?Math.round(unlocked.value/totalAchievements.value*100):0)
 
 async function load(){
-  if(!jugador.value)return
+  const nombre=jugador.value.trim()||'Jugador'
+  setPlayer(nombre)
+  jugador.value=nombre
   loading.value=true
   error.value=''
-  try{data.value=await getPlayerProfile()}catch(e){error.value=e.message;data.value=null}finally{loading.value=false}
+  try{data.value=await getPlayerProfile(jugador.value)}catch(e){error.value=e.message;data.value=null}finally{loading.value=false}
 }
 function formatDate(value){
   if(!value)return '-'
@@ -29,7 +31,7 @@ onMounted(()=>load())
   <h1>Tu perfil</h1>
   <p class="profile-intro">Consulta tu evolución, tus mejores resultados y los logros que has desbloqueado.</p>
 
-  <div class="profile-search card"><div><small>CUENTA</small><strong>{{jugador}}</strong><span>Tu progreso está vinculado a esta cuenta.</span></div><button class="primary" :disabled="loading" @click="load">{{loading?'Cargando...':'Actualizar progreso'}} <span>↻</span></button></div>
+  <div class="profile-search card"><div><small>JUGADOR</small><input v-model="jugador" maxlength="30" placeholder="Nombre del jugador"></div><button class="primary" :disabled="loading" @click="load">{{loading?'Cargando...':'Actualizar progreso'}} <span>↻</span></button></div>
 
   <div v-if="error" class="agent-error">{{error}}</div>
   <template v-if="data">
