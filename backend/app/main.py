@@ -1,14 +1,40 @@
 import logging
 import os
 import uuid
+import json
 from contextlib import closing
 
 from databricks import sql
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 logger = logging.getLogger("onetoFour")
+AI_CATEGORIES = ["Historia", "Cine", "Ciencia", "Deporte", "Corazón", "Naturaleza", "Geografía", "Tecnología", "Música", "Arte", "Literatura", "Cultura general"]
+AI_DIFFICULTIES = ["Fácil", "Medio", "Difícil"]
+
+class GeneratedQuestion(BaseModel):
+    pregunta: str = Field(min_length=10, max_length=500)
+    opcion_a: str = Field(min_length=1, max_length=200)
+    opcion_b: str = Field(min_length=1, max_length=200)
+    opcion_c: str = Field(min_length=1, max_length=200)
+    opcion_d: str = Field(min_length=1, max_length=200)
+    correcta: str = Field(pattern="^[ABCD]$")
+    categoria: str = Field(min_length=1, max_length=50)
+    dificultad: str = Field(pattern="^(Fácil|Medio|Difícil)$")
+    explicacion: str = Field(min_length=1, max_length=500)
+
+class GenerateQuizRequest(BaseModel):
+    numero_preguntas: int = Field(ge=1, le=20)
+    tema: str = Field(min_length=2, max_length=80)
+    dificultad: str = Field(pattern="^(Fácil|Medio|Difícil)$")
+
+class GenerateQuizResponse(BaseModel):
+    preguntas: list[GeneratedQuestion]
+    tema: str
+    dificultad: str
+    generado_por: str
+
 
 app = FastAPI(title="OneToFour API", version="1.0.0", description="API de OneToFour conectada a Azure Databricks.")
 
@@ -53,6 +79,73 @@ def databricks_health():
     except Exception:
         logger.exception("Error conectando con Databricks")
         raise HTTPException(status_code=503, detail="Databricks no disponible.")
+
+@app.get("/api/agent/options")
+def agent_options():
+    return {"categorias": AI_CATEGORIES, "dificultades": AI_DIFFICULTIES, "max_preguntas": 20}
+
+@app.post("/api/agent/generate", response_model=GenerateQuizResponse)
+def generate_quiz(request: GenerateQuizRequest):
+    if OpenAI is None or not os.getenv("OPENAI_API_KEY"):
+        raise HTTPException(status_code=503, detail="El agente IA no está configurado. Añade OPENAI_API_KEY al backend.")
+    model = os.getenv("OPENAI_MODEL", "gpt-5.6-luna")
+    schema = {
+        "type": "object",
+        "properties": {
+            "preguntas": {
+                "type": "array",
+                "minItems": request.numero_preguntas,
+                "maxItems": request.numero_preguntas,
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "pregunta": {"type": "string"},
+                        "opcion_a": {"type": "string"},
+                        "opcion_b": {"type": "string"},
+                        "opcion_c": {"type": "string"},
+                        "opcion_d": {"type": "string"},
+                        "correcta": {"type": "string", "enum": ["A", "B", "C", "D"]},
+                        "categoria": {"type": "string"},
+                        "dificultad": {"type": "string", "enum": AI_DIFFICULTIES},
+                        "explicacion": {"type": "string"}
+                    },
+                    "required": ["pregunta", "opcion_a", "opcion_b", "opcion_c", "opcion_d", "correcta", "categoria", "dificultad", "explicacion"],
+                    "additionalProperties": False
+                }
+            }
+        },
+        "required": ["preguntas"],
+        "additionalProperties": False
+    }
+    prompt = (
+        f"Genera exactamente {request.numero_preguntas} preguntas de un juego de cultura general. "
+        f"Tema solicitado: {request.tema}. Dificultad solicitada: {request.dificultad}. "
+        f"Escribe todo en español. Cada pregunta debe tener exactamente cuatro opciones plausibles y solo una correcta. "
+        f"La dificultad de todas las preguntas debe ser exactamente {request.dificultad}. "
+        "Evita preguntas ambiguas, opiniones, contenido difamatorio o afirmaciones no verificables. "
+        "Incluye una explicación breve y factual. No repitas preguntas."
+    )
+    try:
+        client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+        response = client.responses.create(
+            model=model,
+            input=[
+                {"role": "system", "content": "Eres el agente generador de preguntas de OneToFour. Produce preguntas claras, verificables y jugables."},
+                {"role": "user", "content": prompt}
+            ],
+            text={"format": {"type": "json_schema", "name": "onetoFour_quiz", "strict": True, "schema": schema}}
+        )
+        data = json.loads(response.output_text)
+        validated = [GeneratedQuestion.model_validate(q) for q in data["preguntas"]]
+        if len(validated) != request.numero_preguntas:
+            raise ValueError("Número de preguntas incorrecto")
+        return {"preguntas": validated, "tema": request.tema, "dificultad": request.dificultad, "generado_por": model}
+    except (ValidationError, ValueError, json.JSONDecodeError) as exc:
+        logger.exception("Respuesta inválida del agente")
+        raise HTTPException(status_code=502, detail="El agente generó una respuesta que no se pudo validar.") from exc
+    except Exception as exc:
+        logger.exception("Error generando preguntas con el agente")
+        raise HTTPException(status_code=502, detail="No se pudieron generar las preguntas con el agente.") from exc
 
 @app.get("/api/questions")
 def get_questions(
