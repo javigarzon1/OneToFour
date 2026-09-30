@@ -1,3 +1,4 @@
+import logging
 import os
 import uuid
 from contextlib import closing
@@ -6,6 +7,8 @@ from databricks import sql
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger("onetoFour")
 
 app = FastAPI(title="OneToFour API", version="1.0.0", description="API de OneToFour conectada a Azure Databricks.")
 
@@ -45,8 +48,9 @@ def databricks_health():
                 cursor.execute("SELECT 1 AS ok")
                 row = cursor.fetchone()
         return {"status": "ok", "databricks": row[0] == 1}
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"Databricks no disponible: {exc}")
+    except Exception:
+        logger.exception("Error conectando con Databricks")
+        raise HTTPException(status_code=503, detail="Databricks no disponible.")
 
 @app.get("/api/questions")
 def get_questions(
@@ -77,8 +81,9 @@ def get_questions(
             with closing(connection.cursor()) as cursor:
                 cursor.execute(query, params)
                 return rows_as_dicts(cursor)
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"Error consultando preguntas: {exc}")
+    except Exception:
+        logger.exception("Error consultando preguntas")
+        raise HTTPException(status_code=503, detail="No se pudieron consultar las preguntas.")
 
 @app.post("/api/games")
 def save_game(game: GameCreate):
@@ -95,8 +100,9 @@ def save_game(game: GameCreate):
                     [partida_id, game.jugador.strip(), game.puntuacion, game.total_preguntas, game.porcentaje],
                 )
         return {"partida_id": partida_id, "jugador": game.jugador.strip(), "puntuacion": game.puntuacion, "total_preguntas": game.total_preguntas, "porcentaje": game.porcentaje}
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"Error guardando partida: {exc}")
+    except Exception:
+        logger.exception("Error guardando partida")
+        raise HTTPException(status_code=503, detail="No se pudo guardar la partida.")
 
 @app.get("/api/ranking")
 def get_ranking():
@@ -112,5 +118,6 @@ def get_ranking():
             with closing(connection.cursor()) as cursor:
                 cursor.execute(query)
                 return rows_as_dicts(cursor)
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"Error consultando ranking: {exc}")
+    except Exception:
+        logger.exception("Error consultando ranking")
+        raise HTTPException(status_code=503, detail="No se pudo consultar el ranking.")
