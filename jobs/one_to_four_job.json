@@ -17,6 +17,10 @@
     {
       "name": "dificultad",
       "default": "Todas"
+    },
+    {
+      "name": "modo",
+      "default": "job"
     }
   ],
   "tasks": [
