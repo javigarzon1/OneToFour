@@ -1,7 +1,7 @@
 <script setup>
 import {onMounted,ref} from 'vue'
 import {useRouter} from 'vue-router'
-import {generateQuiz,getAgentOptions} from '../services/api'
+import {generateQuiz,getAgentOptions,getPlayer} from '../services/api'
 
 const router=useRouter()
 const options=ref({categorias:[],dificultades:[],max_preguntas:20})
@@ -20,7 +20,7 @@ async function generar(){
     if(!selectedTema) throw new Error('Escribe el tema que quieres jugar.')
     const result=await generateQuiz({numero_preguntas:Number(numero.value),tema:selectedTema,dificultad:dificultad.value})
     sessionStorage.setItem('onetoFour_ai_quiz',JSON.stringify(result.preguntas))
-    router.push({path:'/jugar',query:{jugador:'Jugador',numero:result.preguntas.length,categoria:tema.value==='Otro'?customTema.value:tema.value,dificultad:dificultad.value,ai:'1'}})
+    router.push({path:'/jugar',query:{jugador:getPlayer(),numero:result.preguntas.length,categoria:tema.value==='Otro'?customTema.value:tema.value,dificultad:dificultad.value,ai:'1'}})
   }catch(e){error.value=e.message}
   finally{loading.value=false}
 }
