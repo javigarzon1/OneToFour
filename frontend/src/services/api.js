@@ -61,3 +61,21 @@ export async function getStats(){
   }
   return request('/api/stats')
 }
+
+export async function getAgentOptions(){
+  if(!API_URL) return {categorias:['Historia','Cine','Ciencia','Deporte','Corazón','Naturaleza','Geografía','Tecnología','Música','Arte','Literatura','Cultura general'],dificultades:['Fácil','Medio','Difícil'],max_preguntas:20}
+  return request('/api/agent/options')
+}
+
+export async function generateQuiz(data){
+  if(!API_URL){
+    const topic=String(data.tema||'Cultura general')
+    return {
+      preguntas: demoQuestions.slice(0,Number(data.numero_preguntas||5)).map((q,i)=>({...q,id:i+1,categoria:topic,dificultad:data.dificultad})),
+      tema:topic,
+      dificultad:data.dificultad,
+      generado_por:'demo'
+    }
+  }
+  return request('/api/agent/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})
+}
