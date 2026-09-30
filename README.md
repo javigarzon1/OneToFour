@@ -288,3 +288,22 @@ python scripts/sync_question_banks.py
 ```
 
 La generación usa `OPENAI_API_KEY` y `OPENAI_MODEL`; nunca se deben guardar claves en los CSV ni en el repositorio.
+
+
+## OneToFour Auth 1.0
+
+La aplicación incorpora registro, login, logout y sesiones JWT.
+
+### Backend
+
+Configura en `backend/.env`:
+
+- `JWT_SECRET`: secreto aleatorio de al menos 32 caracteres.
+- Las credenciales habituales de Azure Databricks.
+- `OPENAI_API_KEY` para el agente IA.
+
+Antes de usar cuentas, ejecuta `sql/03_auth.sql` en el SQL Editor de Databricks. La migración crea `workspace.quiz.usuarios`, añade `usuario_id` a resultados y prepara el historial de preguntas para vincularlo a la cuenta.
+
+Las contraseñas no se guardan en claro: se almacenan con PBKDF2-HMAC-SHA256 y saltos aleatorios. El JWT dura 7 días. El logout 1.0 es stateless: el cliente elimina el token; las sesiones expiran por JWT.
+
+Las partidas nuevas se vinculan en servidor mediante `usuario_id`; el nombre enviado por el navegador no determina a qué cuenta pertenece la partida.
