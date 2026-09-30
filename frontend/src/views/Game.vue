@@ -11,6 +11,8 @@ const streak=ref(0),maxStreak=ref(0),timeLeft=ref(15),correctAnswers=ref(0),time
 let timer=null
 
 const player=computed(()=>route.query.jugador||'Jugador')
+const category=computed(()=>route.query.categoria||'Todas')
+const difficulty=computed(()=>route.query.dificultad||'Todas')
 const question=computed(()=>questions.value[index.value])
 const total=computed(()=>questions.value.length)
 const answers=computed(()=>question.value?[['A',question.value.opcion_a],['B',question.value.opcion_b],['C',question.value.opcion_c],['D',question.value.opcion_d]]:[])
@@ -34,7 +36,7 @@ function stopTimer(){clearInterval(timer);timer=null}
 async function finish(){
   stopTimer()
   try{
-    const r=await saveGame({jugador:player.value,puntuacion:score.value,total_preguntas:total.value,porcentaje:percent.value})
+    const r=await saveGame({jugador:player.value,puntuacion:score.value,total_preguntas:total.value,porcentaje:percent.value,categoria:category.value,dificultad:difficulty.value})
     router.push({path:'/resultado',query:{jugador:player.value,score:score.value,total:total.value,porcentaje:percent.value,racha:maxStreak.value}})
   }catch(e){error.value=e.message;locked.value=false}
 }
