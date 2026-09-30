@@ -10,9 +10,7 @@ const demoQuestions=[
 const demoRanking=[{jugador:'Ana',puntuacion:5,porcentaje:100},{jugador:'Carlos',puntuacion:4,porcentaje:80},{jugador:'Lucía',puntuacion:4,porcentaje:80}]
 
 async function request(path,options={}){
-  const token=localStorage.getItem('onetoFour_token')
   const headers=new Headers(options.headers||{})
-  if(token)headers.set('Authorization','Bearer '+token)
   const response=await fetch(API_URL+path,{...options,headers})
   if(!response.ok){
     let detail='Error en la API.'
@@ -83,8 +81,8 @@ export async function generateQuiz(data){
   return request('/api/agent/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})
 }
 
-export async function getPlayerProfile(){
-  const nombre=getAuthenticatedUser()?.usuario||'Jugador'
+export async function getPlayerProfile(jugador){
+  const nombre=String(jugador||localStorage.getItem('onetoFour_player')||'Jugador').trim()
   if(!API_URL){
     return {jugador:nombre,summary:{partidas:4,puntos_totales:28,mejor_puntuacion:10,mejor_porcentaje:100,porcentaje_medio:82.5,categorias:3},achievements:[
       {id:'primera',titulo:'Primera partida',descripcion:'Completa tu primera partida.',icono:'🎮',desbloqueado:true},
@@ -96,33 +94,14 @@ export async function getPlayerProfile(){
       {id:'desafio',titulo:'Desafío',descripcion:'Completa una partida con dificultad difícil.',icono:'🏔️',desbloqueado:true}
     ],recent:[{puntuacion:10,total_preguntas:10,porcentaje:100,categoria:'Ciencia',dificultad:'Difícil',fecha:'Hoy'},{puntuacion:6,total_preguntas:10,porcentaje:60,categoria:'Historia',dificultad:'Medio',fecha:'Ayer'}]}
   }
-  return request('/api/player/me/profile')
+  return request('/api/player/'+encodeURIComponent(nombre)+'/profile')
 }
 
-export function isAuthenticated(){ return Boolean(localStorage.getItem('onetoFour_token')) }
-export function getAuthenticatedUser(){ return JSON.parse(localStorage.getItem('onetoFour_user')||'null') }
+export function getPlayer(){
+  return localStorage.getItem('onetoFour_player')||'Jugador'
+}
+export function setPlayer(nombre){
+  localStorage.setItem('onetoFour_player',String(nombre||'Jugador').trim()||'Jugador')
+}
 
-export async function register(data){
-  const result=await request('/api/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})
-  setAuth(result)
-  return result
-}
-export async function login(data){
-  const result=await request('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})
-  setAuth(result)
-  return result
-}
-export async function logout(){
-  try{ if(isAuthenticated()) await request('/api/auth/logout',{method:'POST'}) }catch{}
-  clearAuth()
-}
-export function setAuth(data){
-  localStorage.setItem('onetoFour_token',data.access_token)
-  localStorage.setItem('onetoFour_user',JSON.stringify({usuario:data.usuario,usuario_id:data.usuario_id}))
-  localStorage.setItem('onetoFour_player',data.usuario)
-}
-export function clearAuth(){
-  localStorage.removeItem('onetoFour_token')
-  localStorage.removeItem('onetoFour_user')
-  localStorage.removeItem('onetoFour_player')
-}
+
