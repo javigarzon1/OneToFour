@@ -168,3 +168,14 @@ def test_agent_requires_api_key():
             json={"numero_preguntas": 3, "tema": "Historia", "dificultad": "Medio"},
         )
     assert response.status_code == 503
+
+
+def test_questions_random_mode_uses_all_topics():
+    cursor = FakeCursor(rows=[], columns=[])
+
+    with patch("backend.app.main.get_connection", return_value=FakeConnection(cursor)):
+        response = client.get("/api/questions?modo=aleatorio&limit=5")
+
+    assert response.status_code == 200
+    assert "workspace.quiz.preguntas" in cursor.executed
+    assert "ORDER BY rand()" in cursor.executed
