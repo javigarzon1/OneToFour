@@ -69,7 +69,7 @@ def get_questions(
     where = f"WHERE {' AND '.join(filters)}" if filters else ""
     query = f"""
         SELECT id, pregunta, opcion_a, opcion_b, opcion_c, opcion_d,
-               correcta, categoria, dificultad
+               correcta, categoria, dificultad, explicacion
         FROM workspace.quiz.preguntas
         {where}
         ORDER BY rand()
