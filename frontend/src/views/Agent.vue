@@ -4,8 +4,8 @@ import {useRouter} from 'vue-router'
 import {generateQuiz,getAgentOptions,getPlayer} from '../services/api'
 
 const router=useRouter()
-const options=ref({categorias:[],dificultades:[],max_preguntas:20})
-const numero=ref(5),tema=ref('Historia'),customTema=ref(''),dificultad=ref('Medio')
+const options=ref({categorias:[],dificultades:[],max_preguntas:10})
+const numero=10,tema=ref('Historia'),customTema=ref(''),dificultad=ref('Medio')
 const loading=ref(false),error=ref('')
 
 onMounted(async()=>{
@@ -18,9 +18,9 @@ async function generar(){
   try{
     const selectedTema=tema.value==='Otro'?customTema.value.trim():tema.value
     if(!selectedTema) throw new Error('Escribe el tema que quieres jugar.')
-    const result=await generateQuiz({numero_preguntas:Number(numero.value),tema:selectedTema,dificultad:dificultad.value})
-    sessionStorage.setItem('onetoFour_ai_quiz',JSON.stringify(result.preguntas))
-    router.push({path:'/jugar',query:{jugador:getPlayer(),numero:result.preguntas.length,categoria:tema.value==='Otro'?customTema.value:tema.value,dificultad:dificultad.value,ai:'1'}})
+    const result=await generateQuiz({numero_preguntas:numero,tema:selectedTema,dificultad:dificultad.value})
+    sessionStorage.setItem('onetoFour_ai_quiz',JSON.stringify(result.preguntas.slice(0,10)))
+    router.push({path:'/jugar',query:{jugador:getPlayer(),numero:10,categoria:tema.value==='Otro'?customTema.value:tema.value,dificultad:dificultad.value,ai:'1'}})
   }catch(e){error.value=e.message}
   finally{loading.value=false}
 }
@@ -30,12 +30,10 @@ async function generar(){
 <section class="agent page">
   <small>AGENTE IA · ONE TO FOUR</small>
   <h1>Crea tu<br><em>propio quiz.</em></h1>
-  <p class="agent-intro">Dile al agente qué quieres jugar y generará preguntas nuevas para tu partida.</p>
+  <p class="agent-intro">Dile al agente qué quieres jugar y generará exactamente 10 preguntas nuevas para tu partida.</p>
   <form class="card agent-card" @submit.prevent="generar">
     <label>Número de preguntas
-      <select v-model="numero">
-        <option v-for="n in options.max_preguntas" :key="n" :value="n">{{n}}</option>
-      </select>
+      <input value="10" readonly>
     </label>
     <label>Tema
       <select v-model="tema">
@@ -52,7 +50,7 @@ async function generar(){
       </select>
     </label>
     <div v-if="error" class="agent-error">{{error}}</div>
-    <button class="primary" :disabled="loading">{{loading?'Generando preguntas...':'Generar mi partida'}}<span>→</span></button>
+    <button class="primary" :disabled="loading">{{loading?'Generando 10 preguntas...':'Generar mi partida'}}<span>→</span></button>
   </form>
 </section>
 </template>
