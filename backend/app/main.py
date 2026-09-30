@@ -6,7 +6,7 @@ from contextlib import closing
 
 from databricks import sql
 from openai import OpenAI
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, ValidationError
 from .auth import JWT_TTL_SECONDS, create_access_token, current_user, password_hash, password_verify
