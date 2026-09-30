@@ -27,6 +27,9 @@ jobs:
       - name: Compile backend
         run: python -m py_compile backend/app/main.py
 
+      - name: Run backend tests
+        run: pytest -q backend/tests
+
       - name: Start FastAPI
         run: |
           nohup uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000 > /tmp/onetoFour-api.log 2>&1 &
@@ -46,7 +49,7 @@ jobs:
           echo "Respuesta de Databricks:"
           echo "$response"
           if [ $status -ne 0 ]; then
-            echo "La comprobación de Databricks ha fallado. El mensaje anterior contiene el detalle sin mostrar el token."
+            echo "La comprobación de Databricks ha fallado. Revisa los logs del servidor para el detalle técnico."
             exit $status
           fi
           echo "$response" | grep -q '"databricks":true'
