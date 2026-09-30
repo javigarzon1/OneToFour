@@ -28,8 +28,6 @@ CREATE TABLE IF NOT EXISTS workspace.quiz.resultados (
 )
 USING DELTA;
 
-ALTER TABLE workspace.quiz.resultados ADD COLUMNS IF NOT EXISTS (usuario_id STRING);
-
 INSERT INTO workspace.quiz.preguntas
 SELECT * FROM VALUES
   (1, '¿Cuál es la capital de España?', 'Madrid', 'Sevilla', 'Valencia', 'Bilbao', 'A', 'Geografía', 'Fácil', 'Madrid es la capital de España.'),
