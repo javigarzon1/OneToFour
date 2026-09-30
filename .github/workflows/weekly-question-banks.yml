@@ -1,0 +1,64 @@
+name: OneToFour - Actualización semanal de preguntas
+
+on:
+  schedule:
+    - cron: "0 3 * * 0"
+  workflow_dispatch:
+    inputs:
+      initial_target:
+        description: "Mínimo de preguntas por categoría"
+        required: false
+        default: "1200"
+      weekly_new:
+        description: "Preguntas nuevas por categoría"
+        required: false
+        default: "100"
+
+permissions:
+  contents: write
+
+jobs:
+  refresh-question-banks:
+    runs-on: ubuntu-latest
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_MODEL: gpt-5.6-luna
+      DATABRICKS_SERVER_HOSTNAME: dbc-9ebf13e1-da41.cloud.databricks.com
+      DATABRICKS_HTTP_PATH: /sql/1.0/warehouses/7bf58be4bdba98ad
+      DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Generar preguntas
+        run: |
+          python scripts/generate_question_banks.py \
+            --target ${{ github.event.inputs.initial_target || '1200' }} \
+            --new-per-topic ${{ github.event.inputs.weekly_new || '100' }} \
+            --batch-size 100
+
+      - name: Sincronizar con Databricks
+        run: python scripts/sync_question_banks.py
+
+      - name: Guardar cambios
+        run: |
+          if git diff --quiet; then
+            echo "No hay cambios de contenido."
+            exit 0
+          fi
+          git config user.name "Javi Garzón"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/question_banks
+          git commit -m "Actualizar banco de preguntas con IA"
+          git push
