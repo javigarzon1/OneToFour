@@ -294,11 +294,11 @@ La generación usa `OPENAI_API_KEY` y `OPENAI_MODEL`; nunca se deben guardar cla
 
 El frontend queda preparado para **GitHub Pages** mediante `.github/workflows/frontend-pages.yml`. Cada push a `main` que cambie `frontend/` genera y publica una nueva versión.
 
-Para conectar Auth, partidas y Databricks desde la versión publicada, configura en **Settings → Secrets and variables → Actions → Variables** la variable:
+Para conectar partidas, agente IA y Databricks desde la versión publicada, configura en **Settings → Secrets and variables → Actions → Variables** la variable:
 
 `VITE_API_URL` = URL pública de la API FastAPI.
 
-Si `VITE_API_URL` no está definida, el frontend funciona en modo demo y no puede realizar login real contra Databricks.
+Si `VITE_API_URL` no está definida, el frontend funciona en modo demo y no realiza consultas al backend.
 
 La URL prevista de GitHub Pages es:
 
