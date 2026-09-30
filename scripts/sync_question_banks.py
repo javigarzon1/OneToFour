@@ -46,6 +46,11 @@ def main():
               categoria STRING, dificultad STRING, explicacion STRING
             ) USING DELTA
         """)
+        conn.cursor().execute("""
+            CREATE TABLE IF NOT EXISTS workspace.quiz.preguntas_usadas (
+              jugador STRING, pregunta_id INT, partida_id STRING, fecha_uso TIMESTAMP
+            ) USING DELTA
+        """)
 
         for start in range(0, len(rows), 100):
             batch = rows[start:start + 100]
