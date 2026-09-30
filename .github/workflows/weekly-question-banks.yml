@@ -3,6 +3,10 @@ name: OneToFour - Actualización semanal de preguntas
 on:
   schedule:
     - cron: "0 3 * * 0"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/weekly-question-banks.yml"
   workflow_dispatch:
     inputs:
       initial_target:
@@ -43,10 +47,14 @@ jobs:
 
       - name: Generar preguntas
         run: |
-          python scripts/generate_question_banks.py \
-            --target ${{ github.event.inputs.initial_target || '1200' }} \
-            --new-per-topic ${{ github.event.inputs.weekly_new || '100' }} \
-            --batch-size 100
+          if [ "${{ github.event_name }}" = "push" ]; then
+            python scripts/generate_question_banks.py --target 1200 --batch-size 200
+          else
+            python scripts/generate_question_banks.py \
+              --target ${{ github.event.inputs.initial_target || '1200' }} \
+              --new-per-topic ${{ github.event.inputs.weekly_new || '100' }} \
+              --batch-size 200
+          fi
 
       - name: Sincronizar con Databricks
         run: python scripts/sync_question_banks.py
