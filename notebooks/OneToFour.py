@@ -39,7 +39,7 @@ dbutils.widgets.dropdown("numero_preguntas", "5", [str(i) for i in range(1, 11)]
 dbutils.widgets.dropdown("categoria", "Todas", [
     "Todas", "Geografía", "Matemáticas", "Programación", "Ciencia", "Databricks", "Spark"
 ], "Categoría")
-dbutils.widgets.dropdown("dificultad", "Todas", ["Todas", "Fácil", "Medio"], "Dificultad")
+dbutils.widgets.dropdown("dificultad", "Todas", ["Todas", "Fácil", "Medio", "Difícil"], "Dificultad")
 
 jugador = dbutils.widgets.get("jugador").strip() or "Jugador"
 modo = dbutils.widgets.get("modo")
@@ -61,21 +61,21 @@ print(f"Dificultad: {dificultad}")
 # COMMAND ----------
 
 preguntas = [
-    (1, "¿Cuál es la capital de España?", "Madrid", "Sevilla", "Valencia", "Bilbao", "A", "Geografía", "Fácil"),
-    (2, "¿Cuánto es 5 × 6?", "25", "30", "35", "40", "B", "Matemáticas", "Fácil"),
-    (3, "¿Qué lenguaje se utiliza en este proyecto?", "Java", "C++", "Python", "PHP", "C", "Programación", "Fácil"),
-    (4, "¿Cuál es el planeta más cercano al Sol?", "Venus", "Tierra", "Marte", "Mercurio", "D", "Ciencia", "Fácil"),
-    (5, "¿Cuántos continentes se suelen considerar en el modelo de 7 continentes?", "5", "6", "7", "8", "C", "Geografía", "Fácil"),
-    (6, "¿Qué estructura de Python almacena pares clave-valor?", "Lista", "Tupla", "Diccionario", "Conjunto", "C", "Programación", "Medio"),
-    (7, "¿Qué tecnología utiliza Databricks para almacenar tablas transaccionales?", "Delta Lake", "HTML", "FTP", "SMTP", "A", "Databricks", "Medio"),
-    (8, "¿Cuál es el resultado de 10 // 3 en Python?", "2", "3", "3.33", "4", "B", "Programación", "Medio"),
-    (9, "¿Qué función de Spark se utiliza habitualmente para leer una tabla?", "spark.read.table", "spark.write.table", "spark.table.read", "spark.load.table", "A", "Spark", "Medio"),
-    (10, "¿Cuál es el símbolo usado para comentarios de una línea en Python?", "//", "#", "<!--", "-->", "B", "Programación", "Fácil"),
+    (1, "¿Cuál es la capital de España?", "Madrid", "Sevilla", "Valencia", "Bilbao", "A", "Geografía", "Fácil", "Madrid es la capital de España."),
+    (2, "¿Cuánto es 5 × 6?", "25", "30", "35", "40", "B", "Matemáticas", "Fácil", "5 × 6 = 30."),
+    (3, "¿Qué lenguaje se utiliza en este proyecto?", "Java", "C++", "Python", "PHP", "C", "Programación", "Fácil", "OneToFour utiliza Python en su backend y procesamiento de datos."),
+    (4, "¿Cuál es el planeta más cercano al Sol?", "Venus", "Tierra", "Marte", "Mercurio", "D", "Ciencia", "Fácil", "Mercurio es el planeta más cercano al Sol."),
+    (5, "¿Cuántos continentes se suelen considerar en el modelo de 7 continentes?", "5", "6", "7", "8", "C", "Geografía", "Fácil", "El modelo de siete continentes considera África, América del Norte, América del Sur, Antártida, Asia, Europa y Oceanía."),
+    (6, "¿Qué estructura de Python almacena pares clave-valor?", "Lista", "Tupla", "Diccionario", "Conjunto", "C", "Programación", "Medio", "Un diccionario relaciona claves con valores en Python."),
+    (7, "¿Qué tecnología utiliza Databricks para almacenar tablas transaccionales?", "Delta Lake", "HTML", "FTP", "SMTP", "A", "Databricks", "Medio", "Delta Lake aporta transacciones ACID y gestión de tablas sobre almacenamiento de datos."),
+    (8, "¿Cuál es el resultado de 10 // 3 en Python?", "2", "3", "3.33", "4", "B", "Programación", "Medio", "La división entera // devuelve 3 porque descarta la parte decimal."),
+    (9, "¿Qué función de Spark se utiliza habitualmente para leer una tabla?", "spark.read.table", "spark.write.table", "spark.table.read", "spark.load.table", "A", "Spark", "Medio", "spark.read.table permite leer una tabla como DataFrame."),
+    (10, "¿Cuál es el símbolo usado para comentarios de una línea en Python?", "//", "#", "<!--", "-->", "B", "Programación", "Fácil", "En Python, # inicia un comentario de una línea."),
 ]
 
 columnas = [
     "id", "pregunta", "opcion_a", "opcion_b", "opcion_c",
-    "opcion_d", "correcta", "categoria", "dificultad"
+    "opcion_d", "correcta", "categoria", "dificultad", "explicacion"
 ]
 
 df_preguntas = spark.createDataFrame(preguntas, columnas)
