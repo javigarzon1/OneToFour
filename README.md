@@ -247,3 +247,17 @@ Crea el secreto `DATABRICKS_TOKEN` en GitHub en **Settings → Secrets and varia
 - SQL Warehouse
 - Delta Lake
 - PySpark
+
+## Perfil, progreso y logros
+
+La ruta `/perfil` muestra el progreso de un jugador a partir de las partidas almacenadas en Databricks. Incluye partidas jugadas, puntos acumulados, mejor puntuación, porcentaje medio, categorías exploradas e historial reciente.
+
+También incorpora logros desbloqueables calculados a partir del historial:
+
+- Primera partida.
+- 5 y 10 partidas completadas.
+- Una y tres partidas perfectas.
+- 3 categorías diferentes.
+- Una partida en dificultad difícil.
+
+El nombre del jugador se conserva en el navegador para facilitar el acceso al perfil desde el menú **Mi progreso**. El backend expone `GET /api/player/{jugador}/profile` y calcula los datos directamente sobre `workspace.quiz.resultados`.
