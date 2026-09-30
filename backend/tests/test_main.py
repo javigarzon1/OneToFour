@@ -152,3 +152,19 @@ def test_stats_endpoint():
     assert response.json()["categories"][0]["categoria"] == "Programación"
     assert response.json()["difficulties"][0]["dificultad"] == "Medio"
     assert response.json()["recent"][0]["jugador"] == "Javi"
+
+
+def test_agent_options():
+    response = client.get("/api/agent/options")
+    assert response.status_code == 200
+    assert "Historia" in response.json()["categorias"]
+    assert "Difícil" in response.json()["dificultades"]
+
+
+def test_agent_requires_api_key():
+    with patch.dict("os.environ", {}, clear=True):
+        response = client.post(
+            "/api/agent/generate",
+            json={"numero_preguntas": 3, "tema": "Historia", "dificultad": "Medio"},
+        )
+    assert response.status_code == 503
