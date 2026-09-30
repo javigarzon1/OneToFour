@@ -79,3 +79,19 @@ export async function generateQuiz(data){
   }
   return request('/api/agent/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})
 }
+
+export async function getPlayerProfile(jugador){
+  const nombre=String(jugador||'Jugador').trim()
+  if(!API_URL){
+    return {jugador:nombre,summary:{partidas:4,puntos_totales:28,mejor_puntuacion:10,mejor_porcentaje:100,porcentaje_medio:82.5,categorias:3},achievements:[
+      {id:'primera',titulo:'Primera partida',descripcion:'Completa tu primera partida.',icono:'🎮',desbloqueado:true},
+      {id:'cinco',titulo:'En marcha',descripcion:'Completa 5 partidas.',icono:'🚀',desbloqueado:false},
+      {id:'diez',titulo:'Constante',descripcion:'Completa 10 partidas.',icono:'📚',desbloqueado:false},
+      {id:'perfecta',titulo:'Perfeccionista',descripcion:'Consigue una partida perfecta.',icono:'💯',desbloqueado:true},
+      {id:'imparable',titulo:'Imparable',descripcion:'Consigue 3 partidas perfectas.',icono:'🔥',desbloqueado:false},
+      {id:'explorador',titulo:'Explorador',descripcion:'Juega en 3 categorías diferentes.',icono:'🧭',desbloqueado:true},
+      {id:'desafio',titulo:'Desafío',descripcion:'Completa una partida con dificultad difícil.',icono:'🏔️',desbloqueado:true}
+    ],recent:[{puntuacion:10,total_preguntas:10,porcentaje:100,categoria:'Ciencia',dificultad:'Difícil',fecha:'Hoy'},{puntuacion:6,total_preguntas:10,porcentaje:60,categoria:'Historia',dificultad:'Medio',fecha:'Ayer'}]}
+  }
+  return request('/api/player/'+encodeURIComponent(nombre)+'/profile')
+}
