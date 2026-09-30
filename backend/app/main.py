@@ -262,12 +262,12 @@ def save_game(game: GameCreate, user=Depends(current_user)):
                     """
                     INSERT INTO workspace.quiz.resultados
                     (partida_id, usuario_id, jugador, fecha, puntuacion, total_preguntas, porcentaje, categoria, dificultad)
-                    VALUES (?, ?, current_timestamp(), ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, current_timestamp(), ?, ?, ?, ?, ?)
                     """,
                     [partida_id, user["sub"], user["usuario"], game.puntuacion, game.total_preguntas, game.porcentaje, game.categoria.strip(), game.dificultad.strip()],
                 )
-        for question_id in dict.fromkeys(game.preguntas_ids):
-            cursor.execute("INSERT INTO workspace.quiz.preguntas_usadas (usuario_id, jugador, pregunta_id, partida_id, fecha_uso) VALUES (?, ?, ?, ?, current_timestamp())", [user["sub"], user["usuario"], question_id, partida_id])
+                for question_id in dict.fromkeys(game.preguntas_ids):
+                    cursor.execute("INSERT INTO workspace.quiz.preguntas_usadas (usuario_id, jugador, pregunta_id, partida_id, fecha_uso) VALUES (?, ?, ?, ?, current_timestamp())", [user["sub"], user["usuario"], question_id, partida_id])
         return {"partida_id": partida_id, "jugador": user["usuario"], "puntuacion": game.puntuacion, "total_preguntas": game.total_preguntas, "porcentaje": game.porcentaje, "categoria": game.categoria, "dificultad": game.dificultad}
     except Exception:
         logger.exception("Error guardando partida")
