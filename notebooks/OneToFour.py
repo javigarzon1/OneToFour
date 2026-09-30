@@ -105,8 +105,6 @@ CREATE TABLE IF NOT EXISTS {RESULTS_TABLE} (
 USING DELTA
 """)
 
-spark.sql(f"ALTER TABLE {RESULTS_TABLE} ADD COLUMNS (categoria STRING, dificultad STRING)")
-
 # COMMAND ----------
 
 # MAGIC %md
