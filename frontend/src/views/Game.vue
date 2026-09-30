@@ -36,7 +36,7 @@ function stopTimer(){clearInterval(timer);timer=null}
 async function finish(){
   stopTimer()
   try{
-    const r=await saveGame({jugador:player.value,puntuacion:score.value,total_preguntas:total.value,porcentaje:percent.value,categoria:category.value,dificultad:difficulty.value})
+    const r=await saveGame({jugador:player.value,puntuacion:score.value,total_preguntas:total.value,porcentaje:percent.value,categoria:category.value,dificultad:difficulty.value,preguntas_ids:route.query.ai==='1'?[]:questions.value.map(q=>q.id)})
     router.push({path:'/resultado',query:{jugador:player.value,score:score.value,total:total.value,porcentaje:percent.value,racha:maxStreak.value}})
   }catch(e){error.value=e.message;locked.value=false}
 }
@@ -61,7 +61,7 @@ async function load(){
     }else{
       const randomMode=route.query.modo==='aleatorio'
       const requested=Number(route.query.numero||5)
-      const pool=await getQuestions({modo:randomMode?'aleatorio':'normal',categoria:randomMode?undefined:route.query.categoria,dificultad:route.query.dificultad,limit:100})
+      const pool=await getQuestions({modo:randomMode?'aleatorio':'normal',categoria:randomMode?undefined:route.query.categoria,dificultad:route.query.dificultad,limit:Math.max(requested,20),jugador:player.value})
       if(randomMode){
         const shuffled=[...pool].sort(()=>Math.random()-.5)
         const byCategory=new Map()
