@@ -4,6 +4,7 @@ import {useRouter} from 'vue-router'
 const router=useRouter(),jugador=ref(''),numero=ref(5),modo=ref('normal'),categoria=ref('Todas'),dificultad=ref('Todas')
 function empezar(){
   if(!jugador.value.trim())return
+  localStorage.setItem('onetoFour_player',jugador.value.trim())
   router.push({path:'/jugar',query:{jugador:jugador.value.trim(),numero:numero.value,modo:modo.value,categoria:modo.value==='aleatorio'?'Aleatorio':categoria.value,dificultad:dificultad.value}})
 }
 </script>
