@@ -53,9 +53,16 @@ function answer(letter,expired=false){
 }
 async function load(){
   try{
-    questions.value=await getQuestions({categoria:route.query.categoria,dificultad:route.query.dificultad})
-    questions.value.sort(()=>Math.random()-.5)
-    questions.value=questions.value.slice(0,Number(route.query.numero||5))
+    if(route.query.ai==='1'){
+      const stored=sessionStorage.getItem('onetoFour_ai_quiz')
+      if(!stored) throw new Error('No se encontró la partida generada por el agente.')
+      questions.value=JSON.parse(stored)
+      sessionStorage.removeItem('onetoFour_ai_quiz')
+    }else{
+      questions.value=await getQuestions({categoria:route.query.categoria,dificultad:route.query.dificultad})
+      questions.value.sort(()=>Math.random()-.5)
+      questions.value=questions.value.slice(0,Number(route.query.numero||5))
+    }
     if(!questions.value.length)error.value='No hay preguntas para estos filtros.'
     else startTimer()
   }catch(e){error.value=e.message}
