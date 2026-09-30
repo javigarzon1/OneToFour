@@ -5,7 +5,7 @@ import {generateQuiz,getAgentOptions} from '../services/api'
 
 const router=useRouter()
 const options=ref({categorias:[],dificultades:[],max_preguntas:20})
-const numero=ref(5),tema=ref('Historia'),dificultad=ref('Medio')
+const numero=ref(5),tema=ref('Historia'),customTema=ref(''),dificultad=ref('Medio')
 const loading=ref(false),error=ref('')
 
 onMounted(async()=>{
@@ -16,9 +16,11 @@ onMounted(async()=>{
 async function generar(){
   loading.value=true;error.value=''
   try{
-    const result=await generateQuiz({numero_preguntas:Number(numero.value),tema:tema.value,dificultad:dificultad.value})
+    const selectedTema=tema.value==='Otro'?customTema.value.trim():tema.value
+    if(!selectedTema) throw new Error('Escribe el tema que quieres jugar.')
+    const result=await generateQuiz({numero_preguntas:Number(numero.value),tema:selectedTema,dificultad:dificultad.value})
     sessionStorage.setItem('onetoFour_ai_quiz',JSON.stringify(result.preguntas))
-    router.push({path:'/jugar',query:{jugador:'Jugador',numero:result.preguntas.length,categoria:tema.value,dificultad:dificultad.value,ai:'1'}})
+    router.push({path:'/jugar',query:{jugador:'Jugador',numero:result.preguntas.length,categoria:tema.value==='Otro'?customTema.value:tema.value,dificultad:dificultad.value,ai:'1'}})
   }catch(e){error.value=e.message}
   finally{loading.value=false}
 }
@@ -38,7 +40,11 @@ async function generar(){
     <label>Tema
       <select v-model="tema">
         <option v-for="item in options.categorias" :key="item" :value="item">{{item}}</option>
+        <option value="Otro">Otro tema...</option>
       </select>
+    </label>
+    <label v-if="tema==='Otro'">¿Qué tema quieres?
+      <input v-model="customTema" maxlength="80" placeholder="Ej. Videojuegos de los 90">
     </label>
     <label>Dificultad
       <select v-model="dificultad">
