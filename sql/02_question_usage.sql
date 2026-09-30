@@ -17,4 +17,3 @@ CREATE TABLE IF NOT EXISTS workspace.quiz.catalogo_control (
 )
 USING DELTA;
 
-ALTER TABLE workspace.quiz.preguntas_usadas ADD COLUMNS IF NOT EXISTS (usuario_id STRING);
