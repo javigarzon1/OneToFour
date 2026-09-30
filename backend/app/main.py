@@ -20,6 +20,8 @@ class GameCreate(BaseModel):
     puntuacion: int = Field(ge=0)
     total_preguntas: int = Field(gt=0, le=100)
     porcentaje: float = Field(ge=0, le=100)
+    categoria: str = Field(default="Todas", max_length=50)
+    dificultad: str = Field(default="Todas", max_length=30)
 
 def get_connection():
     required = ["DATABRICKS_SERVER_HOSTNAME", "DATABRICKS_HTTP_PATH", "DATABRICKS_TOKEN"]
@@ -94,12 +96,12 @@ def save_game(game: GameCreate):
                 cursor.execute(
                     """
                     INSERT INTO workspace.quiz.resultados
-                    (partida_id, jugador, fecha, puntuacion, total_preguntas, porcentaje)
-                    VALUES (?, ?, current_timestamp(), ?, ?, ?)
+                    (partida_id, jugador, fecha, puntuacion, total_preguntas, porcentaje, categoria, dificultad)
+                    VALUES (?, ?, current_timestamp(), ?, ?, ?, ?, ?)
                     """,
-                    [partida_id, game.jugador.strip(), game.puntuacion, game.total_preguntas, game.porcentaje],
+                    [partida_id, game.jugador.strip(), game.puntuacion, game.total_preguntas, game.porcentaje, game.categoria.strip(), game.dificultad.strip()],
                 )
-        return {"partida_id": partida_id, "jugador": game.jugador.strip(), "puntuacion": game.puntuacion, "total_preguntas": game.total_preguntas, "porcentaje": game.porcentaje}
+        return {"partida_id": partida_id, "jugador": game.jugador.strip(), "puntuacion": game.puntuacion, "total_preguntas": game.total_preguntas, "porcentaje": game.porcentaje, "categoria": game.categoria, "dificultad": game.dificultad}
     except Exception:
         logger.exception("Error guardando partida")
         raise HTTPException(status_code=503, detail="No se pudo guardar la partida.")
@@ -121,3 +123,49 @@ def get_ranking():
     except Exception:
         logger.exception("Error consultando ranking")
         raise HTTPException(status_code=503, detail="No se pudo consultar el ranking.")
+
+@app.get("/api/stats")
+def get_stats():
+    queries = {
+        "summary": """
+            SELECT COUNT(*) AS partidas,
+                   COUNT(DISTINCT jugador) AS jugadores,
+                   ROUND(AVG(porcentaje), 2) AS porcentaje_medio,
+                   MAX(puntuacion) AS mejor_puntuacion
+            FROM workspace.quiz.resultados
+        """,
+        "categories": """
+            SELECT categoria, COUNT(*) AS partidas,
+                   ROUND(AVG(porcentaje), 2) AS porcentaje_medio,
+                   MAX(porcentaje) AS mejor_porcentaje
+            FROM workspace.quiz.resultados
+            WHERE categoria IS NOT NULL AND categoria <> 'Todas'
+            GROUP BY categoria
+            ORDER BY porcentaje_medio DESC, partidas DESC
+        """,
+        "difficulties": """
+            SELECT dificultad, COUNT(*) AS partidas,
+                   ROUND(AVG(porcentaje), 2) AS porcentaje_medio
+            FROM workspace.quiz.resultados
+            WHERE dificultad IS NOT NULL AND dificultad <> 'Todas'
+            GROUP BY dificultad
+            ORDER BY porcentaje_medio DESC
+        """,
+        "recent": """
+            SELECT jugador, puntuacion, total_preguntas, porcentaje, categoria, dificultad, fecha
+            FROM workspace.quiz.resultados
+            ORDER BY fecha DESC
+            LIMIT 10
+        """
+    }
+    try:
+        with closing(get_connection()) as connection:
+            result = {}
+            for name, query in queries.items():
+                with closing(connection.cursor()) as cursor:
+                    cursor.execute(query)
+                    result[name] = rows_as_dicts(cursor)
+        return result
+    except Exception:
+        logger.exception("Error consultando estadísticas")
+        raise HTTPException(status_code=503, detail="No se pudieron consultar las estadísticas.")
