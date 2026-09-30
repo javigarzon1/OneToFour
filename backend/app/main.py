@@ -160,7 +160,7 @@ def get_questions(
     filters = []
     params = []
     if modo == "normal" and categoria and categoria not in ("Todas", "Aleatorio"):
-        filters.append("categoria = ?")
+        filters.append("p.categoria = ?")
         params.append(categoria)
     if dificultad and dificultad != "Todas":
         filters.append("p.dificultad = ?")
