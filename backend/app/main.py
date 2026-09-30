@@ -5,6 +5,7 @@ import json
 from contextlib import closing
 
 from databricks import sql
+from openai import OpenAI
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, ValidationError
@@ -86,7 +87,7 @@ def agent_options():
 
 @app.post("/api/agent/generate", response_model=GenerateQuizResponse)
 def generate_quiz(request: GenerateQuizRequest):
-    if OpenAI is None or not os.getenv("OPENAI_API_KEY"):
+    if not os.getenv("OPENAI_API_KEY"):
         raise HTTPException(status_code=503, detail="El agente IA no está configurado. Añade OPENAI_API_KEY al backend.")
     model = os.getenv("OPENAI_MODEL", "gpt-5.6-luna")
     schema = {
