@@ -22,7 +22,7 @@ async function request(path,options={}){
 export async function getQuestions(params={}){
   if(!API_URL){
     return demoQuestions
-      .filter(q=>!params.categoria||params.categoria==='Todas'||q.categoria===params.categoria)
+      .filter(q=>!params.categoria||params.categoria==='Todas'||params.categoria==='Aleatorio'||q.categoria===params.categoria)
       .filter(q=>!params.dificultad||params.dificultad==='Todas'||q.dificultad===params.dificultad)
   }
   return request('/api/questions?'+new URLSearchParams({...params,limit:params.limit||100}))
