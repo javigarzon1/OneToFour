@@ -56,6 +56,9 @@ jobs:
               --batch-size 200
           fi
 
+      - name: Validar calidad de los bancos
+        run: python scripts/validate_question_banks.py --min-per-category 1200
+
       - name: Sincronizar con Databricks
         run: python scripts/sync_question_banks.py
 
