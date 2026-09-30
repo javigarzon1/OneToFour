@@ -19,10 +19,12 @@ class FakeCursor:
         self.description = [(column,) for column in self.columns]
         self.executed = None
         self.params = None
+        self.executed_history = []
 
     def execute(self, query, params=None):
         self.executed = query
         self.params = params
+        self.executed_history.append(query)
 
     def fetchall(self):
         return self.rows
@@ -115,7 +117,7 @@ def test_save_game():
     assert response.status_code == 200
     assert response.json()["jugador"] == "Javi"
     assert response.json()["puntuacion"] == 4
-    assert "workspace.quiz.resultados" in cursor.executed
+    assert any("workspace.quiz.resultados" in query for query in cursor.executed_history)
 
 
 def test_ranking_endpoint():
@@ -220,7 +222,7 @@ def test_questions_exclude_player_history():
     with patch("backend.app.main.get_connection", return_value=FakeConnection(cursor)):
         response = client.get("/api/questions?limit=5")
     assert response.status_code == 200
-    assert "preguntas_usadas" in cursor.executed
+    assert any("preguntas_usadas" in query for query in cursor.executed_history)
     assert "u.usuario_id = ?" in cursor.executed
     assert cursor.params == ["test-user-id", 5]
 
