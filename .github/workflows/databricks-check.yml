@@ -14,7 +14,6 @@ jobs:
       DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       OPENAI_MODEL: gpt-5.6-luna
-      JWT_SECRET: ci-test-secret-one-to-four-32-chars-minimum
       CORS_ORIGINS: http://localhost:5173
 
     steps:
@@ -65,19 +64,10 @@ jobs:
           fi
           echo "$response" | grep -q '"databricks":true'
 
-      - name: Create CI JWT
-        run: |
-          token=$(python - <<'PY'
-          import jwt
-          print(jwt.encode({"sub":"ci-user","usuario":"CI"}, "ci-test-secret-one-to-four-32-chars-minimum", algorithm="HS256"))
-          PY
-          )
-          echo "ONE_TO_FOUR_CI_TOKEN=$token" >> "$GITHUB_ENV"
-
       - name: Check questions endpoint
         run: |
           set +e
-          response=$(curl --silent --show-error --fail-with-body -H "Authorization: Bearer $ONE_TO_FOUR_CI_TOKEN" "http://127.0.0.1:8000/api/questions?limit=1")
+          response=$(curl --silent --show-error --fail-with-body "http://127.0.0.1:8000/api/questions?jugador=CI&limit=1")
           status=$?
           echo "HTTP/API exit code: $status"
           echo "$response"
