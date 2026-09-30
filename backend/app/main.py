@@ -49,6 +49,7 @@ class GameCreate(BaseModel):
     porcentaje: float = Field(ge=0, le=100)
     categoria: str = Field(default="Todas", max_length=50)
     dificultad: str = Field(default="Todas", max_length=30)
+    preguntas_ids: list[int] = Field(default_factory=list, max_length=100)
 
 def get_connection():
     required = ["DATABRICKS_SERVER_HOSTNAME", "DATABRICKS_HTTP_PATH", "DATABRICKS_TOKEN"]
@@ -154,6 +155,7 @@ def get_questions(
     dificultad: str | None = Query(default=None, max_length=30),
     modo: str = Query(default="normal", pattern="^(normal|aleatorio)$"),
     limit: int = Query(default=20, ge=1, le=100),
+    jugador: str | None = Query(default=None, max_length=30),
 ):
     filters = []
     params = []
@@ -161,13 +163,23 @@ def get_questions(
         filters.append("categoria = ?")
         params.append(categoria)
     if dificultad and dificultad != "Todas":
-        filters.append("dificultad = ?")
+        filters.append("p.dificultad = ?")
         params.append(dificultad)
+    if jugador and jugador.strip():
+        filters.append("""
+            NOT EXISTS (
+                SELECT 1
+                FROM workspace.quiz.preguntas_usadas u
+                WHERE LOWER(u.jugador) = LOWER(?)
+                  AND u.pregunta_id = p.id
+            )
+        """)
+        params.append(jugador.strip())
     where = f"WHERE {' AND '.join(filters)}" if filters else ""
     query = f"""
-        SELECT id, pregunta, opcion_a, opcion_b, opcion_c, opcion_d,
-               correcta, categoria, dificultad, explicacion
-        FROM workspace.quiz.preguntas
+        SELECT p.id, p.pregunta, p.opcion_a, p.opcion_b, p.opcion_c, p.opcion_d,
+               p.correcta, p.categoria, p.dificultad, p.explicacion
+        FROM workspace.quiz.preguntas p
         {where}
         ORDER BY rand()
         LIMIT ?
