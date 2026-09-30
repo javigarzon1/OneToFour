@@ -128,3 +128,27 @@ def test_ranking_endpoint():
     assert response.json() == [
         {"jugador": "Javi", "puntuacion": 5, "porcentaje": 100.0}
     ]
+
+
+def test_stats_endpoint():
+    cursors = [
+        FakeCursor(rows=[(3, 2, 75.0, 10)], columns=["partidas", "jugadores", "porcentaje_medio", "mejor_puntuacion"]),
+        FakeCursor(rows=[("Programación", 2, 80.0, 100.0)], columns=["categoria", "partidas", "porcentaje_medio", "mejor_porcentaje"]),
+        FakeCursor(rows=[("Medio", 2, 70.0)], columns=["dificultad", "partidas", "porcentaje_medio"]),
+        FakeCursor(rows=[("Javi", 5, 5, 100.0, "Programación", "Medio", "2026-09-30")], columns=["jugador", "puntuacion", "total_preguntas", "porcentaje", "categoria", "dificultad", "fecha"]),
+    ]
+
+    class MultiCursorConnection:
+        def cursor(self):
+            return cursors.pop(0)
+        def close(self):
+            pass
+
+    with patch("backend.app.main.get_connection", return_value=MultiCursorConnection()):
+        response = client.get("/api/stats")
+
+    assert response.status_code == 200
+    assert response.json()["summary"][0]["partidas"] == 3
+    assert response.json()["categories"][0]["categoria"] == "Programación"
+    assert response.json()["difficulties"][0]["dificultad"] == "Medio"
+    assert response.json()["recent"][0]["jugador"] == "Javi"
