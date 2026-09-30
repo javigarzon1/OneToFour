@@ -16,7 +16,7 @@ USING DELTA;
 
 ALTER TABLE workspace.quiz.preguntas ADD COLUMNS IF NOT EXISTS (explicacion STRING);
 
-ALTER TABLE workspace.quiz.resultados ADD COLUMNS IF NOT EXISTS (usuario_id STRING);\n\nCREATE TABLE IF NOT EXISTS workspace.quiz.resultados (
+CREATE TABLE IF NOT EXISTS workspace.quiz.resultados (
   partida_id STRING,
   jugador STRING,
   fecha TIMESTAMP,
@@ -27,6 +27,8 @@ ALTER TABLE workspace.quiz.resultados ADD COLUMNS IF NOT EXISTS (usuario_id STRI
   dificultad STRING
 )
 USING DELTA;
+
+ALTER TABLE workspace.quiz.resultados ADD COLUMNS IF NOT EXISTS (usuario_id STRING);
 
 INSERT INTO workspace.quiz.preguntas
 SELECT * FROM VALUES
