@@ -42,3 +42,17 @@ SELECT * FROM VALUES
   (10, '¿Cuál es el símbolo usado para comentarios de una línea en Python?', '//', '#', '<!--', '-->', 'B', 'Programación', 'Fácil', 'En Python, # inicia un comentario de una línea.')
 AS v(id, pregunta, opcion_a, opcion_b, opcion_c, opcion_d, correcta, categoria, dificultad, explicacion)
 WHERE NOT EXISTS (SELECT 1 FROM workspace.quiz.preguntas);
+
+UPDATE workspace.quiz.preguntas SET explicacion = CASE id
+  WHEN 1 THEN 'Madrid es la capital de España.'
+  WHEN 2 THEN '5 × 6 = 30.'
+  WHEN 3 THEN 'OneToFour utiliza Python en su backend y procesamiento de datos.'
+  WHEN 4 THEN 'Mercurio es el planeta más cercano al Sol.'
+  WHEN 5 THEN 'El modelo de siete continentes considera África, América del Norte, América del Sur, Antártida, Asia, Europa y Oceanía.'
+  WHEN 6 THEN 'Un diccionario relaciona claves con valores en Python.'
+  WHEN 7 THEN 'Delta Lake aporta transacciones ACID y gestión de tablas sobre almacenamiento de datos.'
+  WHEN 8 THEN 'La división entera // devuelve 3 porque descarta la parte decimal.'
+  WHEN 9 THEN 'spark.read.table permite leer una tabla como DataFrame.'
+  WHEN 10 THEN 'En Python, # inicia un comentario de una línea.'
+END
+WHERE id BETWEEN 1 AND 10 AND explicacion IS NULL;
