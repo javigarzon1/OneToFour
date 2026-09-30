@@ -61,7 +61,7 @@ async function load(){
     }else{
       const randomMode=route.query.modo==='aleatorio'
       const requested=Number(route.query.numero||5)
-      const pool=await getQuestions({categoria:randomMode?undefined:route.query.categoria,dificultad:route.query.dificultad,limit:100})
+      const pool=await getQuestions({modo:randomMode?'aleatorio':'normal',categoria:randomMode?undefined:route.query.categoria,dificultad:route.query.dificultad,limit:100})
       if(randomMode){
         const shuffled=[...pool].sort(()=>Math.random()-.5)
         const byCategory=new Map()
