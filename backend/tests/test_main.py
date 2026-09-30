@@ -3,6 +3,9 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from backend.app.main import app
+from backend.app.auth import current_user
+
+app.dependency_overrides[current_user] = lambda: {"sub": "test-user-id", "usuario": "Javi"}
 
 
 client = TestClient(app)
@@ -215,11 +218,11 @@ def test_player_profile():
 def test_questions_exclude_player_history():
     cursor = FakeCursor(rows=[], columns=[])
     with patch("backend.app.main.get_connection", return_value=FakeConnection(cursor)):
-        response = client.get("/api/questions?jugador=Javi&limit=5")
+        response = client.get("/api/questions?limit=5")
     assert response.status_code == 200
     assert "preguntas_usadas" in cursor.executed
-    assert "LOWER(u.jugador) = LOWER(?)" in cursor.executed
-    assert cursor.params == ["Javi", 5]
+    assert "u.usuario_id = ?" in cursor.executed
+    assert cursor.params == ["test-user-id", 5]
 
 
 def test_save_game_records_question_ids():
