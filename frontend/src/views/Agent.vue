@@ -52,7 +52,7 @@ async function generar(){
       </select>
     </label>
     <div v-if="error" class="agent-error">{{error}}</div>
-    <button class="primary" :disabled="loading">{{loading?'Generando preguntas...':'Generar mi partida'}<span>→</span></button>
+    <button class="primary" :disabled="loading">{{loading?'Generando preguntas...':'Generar mi partida'}}<span>→</span></button>
   </form>
 </section>
 </template>
