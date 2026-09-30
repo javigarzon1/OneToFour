@@ -36,6 +36,7 @@ El navegador nunca recibe las credenciales de Databricks. El backend mantiene es
 
 - Inicio de partidas con nombre del jugador.
 - Selección del número de preguntas.
+- Modo aleatorio que mezcla preguntas de diferentes categorías.
 - Filtros por categoría y dificultad.
 - Cuatro respuestas por pregunta.
 - Puntuación automática.
@@ -113,6 +114,8 @@ Las tablas utilizadas son:
 
 ## Agente IA
 
+El modo **Aleatorio** selecciona preguntas al azar entre las categorías disponibles y, cuando hay suficientes preguntas, alterna categorías para evitar que la partida se concentre en un único tema. También se puede mantener un filtro de dificultad.
+
 El modo **Agente IA** permite seleccionar un tema (Historia, Cine, Ciencia, Deporte, Corazón, Naturaleza y otros), una dificultad y entre 1 y 20 preguntas. FastAPI envía la petición al modelo configurado mediante `OPENAI_API_KEY`, valida la respuesta estructurada y entrega las preguntas al frontend para iniciar la partida.
 
 La clave de OpenAI permanece exclusivamente en el backend. Para habilitarlo localmente añade `OPENAI_API_KEY` y, opcionalmente, `OPENAI_MODEL` en `backend/.env`. En GitHub Actions, configura el secreto `OPENAI_API_KEY`.
@@ -183,7 +186,7 @@ La ruta `/estadisticas` muestra métricas calculadas en Databricks: partidas, ju
 ### Obtener preguntas
 
 ~~~text
-GET /api/questions?categoria=Programación&dificultad=Medio&limit=10
+GET /api/questions?modo=aleatorio&dificultad=Medio&limit=10
 ~~~
 
 ### Guardar una partida
