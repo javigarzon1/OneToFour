@@ -97,6 +97,7 @@ Las tablas utilizadas son:
 - `correcta`
 - `categoria`
 - `dificultad`
+- `explicacion`
 
 ### quiz.resultados
 
@@ -106,6 +107,8 @@ Las tablas utilizadas son:
 - `puntuacion`
 - `total_preguntas`
 - `porcentaje`
+- `categoria`
+- `dificultad`
 
 ## 2. Arrancar la API
 
@@ -164,6 +167,10 @@ npm run dev
 
 Abre el frontend en `http://localhost:5173`.
 
+## Estadísticas
+
+La ruta `/estadisticas` muestra métricas calculadas en Databricks: partidas, jugadores, porcentaje medio, mejor puntuación, rendimiento por categoría y dificultad, y las últimas partidas.
+
 ## Endpoints de la API
 
 ### Obtener preguntas
@@ -184,7 +191,9 @@ Content-Type: application/json
   "jugador": "Javi",
   "puntuacion": 8,
   "total_preguntas": 10,
-  "porcentaje": 80
+  "porcentaje": 80,
+  "categoria": "Programación",
+  "dificultad": "Medio"
 }
 ~~~
 
@@ -194,12 +203,27 @@ Content-Type: application/json
 GET /api/ranking
 ~~~
 
+## Pruebas y CI
+
+El workflow de GitHub Actions valida automáticamente el backend, ejecuta los tests, construye el frontend y comprueba la conexión con Databricks. También puede ejecutarse manualmente desde la pestaña Actions.
+
+Para ejecutar los tests localmente desde la raíz:
+
+~~~bash
+pip install -r backend/requirements.txt
+pytest -q backend/tests
+~~~
+
 ## Seguridad
 
 - Las credenciales de Databricks solo existen en el backend.
 - `.env` está excluido de Git.
 - Los filtros y valores de escritura se envían como parámetros SQL.
 - Para producción, utiliza OAuth/M2M con un service principal en lugar de depender de un token personal.
+
+## Configuración de GitHub Actions
+
+Crea el secreto `DATABRICKS_TOKEN` en GitHub en **Settings → Secrets and variables → Actions**. El hostname y el HTTP path del Warehouse se mantienen en el workflow; el token nunca se guarda en el repositorio.
 
 ## Tecnologías
 
