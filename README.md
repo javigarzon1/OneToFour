@@ -307,3 +307,18 @@ Antes de usar cuentas, ejecuta `sql/03_auth.sql` en el SQL Editor de Databricks.
 Las contraseñas no se guardan en claro: se almacenan con PBKDF2-HMAC-SHA256 y saltos aleatorios. El JWT dura 7 días. El logout 1.0 es stateless: el cliente elimina el token; las sesiones expiran por JWT.
 
 Las partidas nuevas se vinculan en servidor mediante `usuario_id`; el nombre enviado por el navegador no determina a qué cuenta pertenece la partida.
+
+
+## Despliegue del frontend
+
+El frontend queda preparado para **GitHub Pages** mediante `.github/workflows/frontend-pages.yml`. Cada push a `main` que cambie `frontend/` genera y publica una nueva versión.
+
+Para conectar Auth, partidas y Databricks desde la versión publicada, configura en **Settings → Secrets and variables → Actions → Variables** la variable:
+
+`VITE_API_URL` = URL pública de la API FastAPI.
+
+Si `VITE_API_URL` no está definida, el frontend funciona en modo demo y no puede realizar login real contra Databricks.
+
+La URL prevista de GitHub Pages es:
+
+`https://javigarzon1.github.io/OneToFour/`
