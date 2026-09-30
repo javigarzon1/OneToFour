@@ -229,7 +229,7 @@ pytest -q backend/tests
 - Las credenciales de Databricks solo existen en el backend.
 - `.env` está excluido de Git.
 - Los filtros y valores de escritura se envían como parámetros SQL.
-- Para producción, utiliza OAuth/M2M con un service principal en lugar de depender de un token personal.
+- Para producción, mantén las credenciales de Databricks exclusivamente en el backend.
 
 ## Configuración de GitHub Actions
 
@@ -260,7 +260,7 @@ También incorpora logros desbloqueables calculados a partir del historial:
 - 3 categorías diferentes.
 - Una partida en dificultad difícil.
 
-El nombre del jugador se conserva en el navegador para facilitar el acceso al perfil desde el menú **Mi progreso**. El backend expone `GET /api/player/{jugador}/profile` y calcula los datos directamente sobre `workspace.quiz.resultados`.
+El nombre del jugador se conserva en el navegador para facilitar el acceso al perfil desde el menú **Mi progreso**. No hay cuentas ni inicio de sesión: el backend expone `GET /api/player/{jugador}/profile` y calcula los datos directamente sobre `workspace.quiz.resultados`.
 
 
 ## Banco de preguntas y anti-repetición
@@ -288,25 +288,6 @@ python scripts/sync_question_banks.py
 ```
 
 La generación usa `OPENAI_API_KEY` y `OPENAI_MODEL`; nunca se deben guardar claves en los CSV ni en el repositorio.
-
-
-## OneToFour Auth 1.0
-
-La aplicación incorpora registro, login, logout y sesiones JWT.
-
-### Backend
-
-Configura en `backend/.env`:
-
-- `JWT_SECRET`: secreto aleatorio de al menos 32 caracteres.
-- Las credenciales habituales de Azure Databricks.
-- `OPENAI_API_KEY` para el agente IA.
-
-Antes de usar cuentas, ejecuta `sql/03_auth.sql` en el SQL Editor de Databricks. La migración crea `workspace.quiz.usuarios`, añade `usuario_id` a resultados y prepara el historial de preguntas para vincularlo a la cuenta.
-
-Las contraseñas no se guardan en claro: se almacenan con PBKDF2-HMAC-SHA256 y saltos aleatorios. El JWT dura 7 días. El logout 1.0 es stateless: el cliente elimina el token; las sesiones expiran por JWT.
-
-Las partidas nuevas se vinculan en servidor mediante `usuario_id`; el nombre enviado por el navegador no determina a qué cuenta pertenece la partida.
 
 
 ## Despliegue del frontend
