@@ -19,7 +19,7 @@ const routes=[
   {path:'/perfil',component:Profile,meta:{requiresAuth:true}},
   {path:'/cuenta',component:Auth}
 ]
-const router=createRouter({history:createWebHistory(),routes})
+const router=createRouter({history:createWebHistory(import.meta.env.BASE_URL),routes})
 router.beforeEach((to)=>{
   if(to.meta.requiresAuth && !isAuthenticated()){
     return {path:'/cuenta',query:{redirect:to.fullPath}}
