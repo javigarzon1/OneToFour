@@ -3,7 +3,6 @@ import {computed,onMounted,ref} from 'vue'
 import {getPlayerProfile} from '../services/api'
 
 const jugador=ref(localStorage.getItem('onetoFour_player')||'')
-const input=ref(jugador.value)
 const data=ref(null),loading=ref(false),error=ref('')
 
 const unlocked=computed(()=>data.value?.achievements?.filter(a=>a.desbloqueado).length||0)
@@ -11,20 +10,17 @@ const totalAchievements=computed(()=>data.value?.achievements?.length||0)
 const progress=computed(()=>totalAchievements.value?Math.round(unlocked.value/totalAchievements.value*100):0)
 
 async function load(){
-  const name=input.value.trim()
-  if(!name)return
-  localStorage.setItem('onetoFour_player',name)
-  jugador.value=name
+  if(!jugador.value)return
   loading.value=true
   error.value=''
-  try{data.value=await getPlayerProfile(name)}catch(e){error.value=e.message;data.value=null}finally{loading.value=false}
+  try{data.value=await getPlayerProfile()}catch(e){error.value=e.message;data.value=null}finally{loading.value=false}
 }
 function formatDate(value){
   if(!value)return '-'
   const date=new Date(value)
   return Number.isNaN(date.getTime())?value:date.toLocaleDateString('es-ES',{day:'2-digit',month:'short'})
 }
-onMounted(()=>{if(jugador.value)load()})
+onMounted(()=>load())
 </script>
 
 <template>
@@ -33,12 +29,7 @@ onMounted(()=>{if(jugador.value)load()})
   <h1>Tu perfil</h1>
   <p class="profile-intro">Consulta tu evolución, tus mejores resultados y los logros que has desbloqueado.</p>
 
-  <form class="profile-search card" @submit.prevent="load">
-    <label>Jugador
-      <input v-model="input" maxlength="30" placeholder="Escribe tu nombre">
-    </label>
-    <button class="primary" :disabled="!input.trim()||loading">{{loading?'Cargando...':'Ver mi progreso'}} <span>→</span></button>
-  </form>
+  <div class="profile-search card"><div><small>CUENTA</small><strong>{{jugador}}</strong><span>Tu progreso está vinculado a esta cuenta.</span></div><button class="primary" :disabled="loading" @click="load">{{loading?'Cargando...':'Actualizar progreso'}} <span>↻</span></button></div>
 
   <div v-if="error" class="agent-error">{{error}}</div>
   <template v-if="data">
