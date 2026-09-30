@@ -1,8 +1,8 @@
 <script setup>
 import {computed,onMounted,ref} from 'vue'
-import {getPlayerProfile} from '../services/api'
+import {getPlayerProfile,getAuthenticatedUser} from '../services/api'
 
-const jugador=ref(localStorage.getItem('onetoFour_player')||'')
+const jugador=ref(getAuthenticatedUser()?.usuario||'')
 const data=ref(null),loading=ref(false),error=ref('')
 
 const unlocked=computed(()=>data.value?.achievements?.filter(a=>a.desbloqueado).length||0)
