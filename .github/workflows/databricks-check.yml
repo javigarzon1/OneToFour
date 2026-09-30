@@ -30,6 +30,10 @@ jobs:
       - name: Run backend tests
         run: pytest -q backend/tests
 
+      - name: Build frontend
+        working-directory: frontend
+        run: npm install && npm run build
+
       - name: Start FastAPI
         run: |
           nohup uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000 > /tmp/onetoFour-api.log 2>&1 &
