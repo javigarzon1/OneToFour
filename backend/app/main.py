@@ -24,7 +24,7 @@ class GameCreate(BaseModel):
     dificultad:str="Todas"
     preguntas_ids:list[int]=Field(default_factory=list,max_length=10)
 
-app=FastAPI(title="OneToFour API",version="1.0.1")
+app=FastAPI(title="OneToFour API",version="1.0.2")
 allowed_origins=[x.strip() for x in os.getenv("CORS_ORIGINS","http://localhost:5173,http://127.0.0.1:5173").split(",") if x.strip()]
 app.add_middleware(CORSMiddleware,allow_origins=allowed_origins,allow_credentials=True,allow_methods=["*"],allow_headers=["*"])
 
@@ -61,14 +61,30 @@ def generate_quiz(request:GenerateQuizRequest):
     if not os.getenv("OPENAI_API_KEY"):
         raise HTTPException(503,"El agente IA no está configurado. Añade OPENAI_API_KEY al backend.")
     schema={
-        "type":"object","properties":{
-            "preguntas":{"type":"array","minItems":10,"maxItems":10,"items":{
-                "type":"object","properties":{
-                    "pregunta":{"type":"string"},"opcion_a":{"type":"string"},"opcion_b":{"type":"string"},"opcion_c":{"type":"string"},"opcion_d":{"type":"string"},
-                    "correcta":{"type":"string","enum":["A","B","C","D"]},"categoria":{"type":"string"},"dificultad":{"type":"string","enum":AI_DIFFICULTIES},"explicacion":{"type":"string"}
-                },"required":["pregunta","opcion_a","opcion_b","opcion_c","opcion_d","correcta","categoria","dificultad","explicacion"],"additionalProperties":False
-            }}
-        },"required":["preguntas"],"additionalProperties":False
+        "type":"object",
+        "properties":{
+            "preguntas":{
+                "type":"array","minItems":10,"maxItems":10,
+                "items":{
+                    "type":"object",
+                    "properties":{
+                        "pregunta":{"type":"string"},
+                        "opcion_a":{"type":"string"},
+                        "opcion_b":{"type":"string"},
+                        "opcion_c":{"type":"string"},
+                        "opcion_d":{"type":"string"},
+                        "correcta":{"type":"string","enum":["A","B","C","D"]},
+                        "categoria":{"type":"string"},
+                        "dificultad":{"type":"string","enum":AI_DIFFICULTIES},
+                        "explicacion":{"type":"string"}
+                    },
+                    "required":["pregunta","opcion_a","opcion_b","opcion_c","opcion_d","correcta","categoria","dificultad","explicacion"],
+                    "additionalProperties":False
+                }
+            }
+        },
+        "required":["preguntas"],
+        "additionalProperties":False
     }
     prompt=(f"Genera exactamente 10 preguntas exclusivamente sobre el tema: {request.tema}. "
             f"Dificultad exacta: {request.dificultad}. En español. No uses preguntas de otros temas. "
@@ -77,13 +93,16 @@ def generate_quiz(request:GenerateQuizRequest):
         client=OpenAI(api_key=os.environ["OPENAI_API_KEY"])
         response=client.responses.create(
             model=os.getenv("OPENAI_MODEL","gpt-5.6-luna"),
-            input=[{"role":"system","content":"Eres el agente de preguntas de OneToFour. Respeta estrictamente el tema solicitado."},{"role":"user","content":prompt}],
+            input=[
+                {"role":"system","content":"Eres el agente de preguntas de OneToFour. Respeta estrictamente el tema solicitado."},
+                {"role":"user","content":prompt}
+            ],
             text={"format":{"type":"json_schema","name":"onetoFour_quiz","strict":True,"schema":schema}}
         )
         data=json.loads(response.output_text)
-        if len(data.get("preguntas",[]))!=10: raise ValueError("El agente no generó exactamente 10 preguntas")
+        if len(data.get("preguntas",[]))!=10:
+            raise ValueError("El agente no generó exactamente 10 preguntas")
         return {"preguntas":data["preguntas"],"tema":request.tema,"dificultad":request.dificultad,"generado_por":os.getenv("OPENAI_MODEL","gpt-5.6-luna")}
-    except HTTPException: raise
     except Exception:
         logger.exception("Error generando preguntas")
         raise HTTPException(502,"No se pudieron generar las preguntas con el agente.")
@@ -102,7 +121,8 @@ def get_questions(categoria:str|None=Query(None,max_length=80),dificultad:str|No
     try:
         with closing(get_connection()) as cn:
             with closing(cn.cursor()) as cur:
-                cur.execute(query,params); return rows_as_dicts(cur)
+                cur.execute(query,params)
+                return rows_as_dicts(cur)
     except Exception:
         logger.exception("Error consultando preguntas")
         raise HTTPException(503,"No se pudieron consultar las preguntas.")
@@ -129,24 +149,27 @@ def get_ranking():
                 cur.execute("SELECT jugador,MAX(puntuacion) AS puntuacion,MAX(porcentaje) AS porcentaje FROM workspace.quiz.resultados GROUP BY jugador ORDER BY porcentaje DESC,puntuacion DESC,jugador ASC LIMIT 20")
                 return rows_as_dicts(cur)
     except Exception:
-        logger.exception("Error consultando ranking"); raise HTTPException(503,"No se pudo consultar el ranking.")
+        logger.exception("Error consultando ranking")
+        raise HTTPException(503,"No se pudo consultar el ranking.")
 
 @app.get("/api/stats")
 def get_stats():
+    queries={
+        "summary":"SELECT COUNT(*) AS partidas,COUNT(DISTINCT jugador) AS jugadores,ROUND(AVG(porcentaje),2) AS porcentaje_medio,MAX(puntuacion) AS mejor_puntuacion FROM workspace.quiz.resultados",
+        "categories":"SELECT categoria,COUNT(*) AS partidas,ROUND(AVG(porcentaje),2) AS porcentaje_medio,MAX(porcentaje) AS mejor_porcentaje FROM workspace.quiz.resultados WHERE categoria IS NOT NULL AND categoria <> 'Todas' GROUP BY categoria ORDER BY porcentaje_medio DESC,partidas DESC",
+        "difficulties":"SELECT dificultad,COUNT(*) AS partidas,ROUND(AVG(porcentaje),2) AS porcentaje_medio FROM workspace.quiz.resultados WHERE dificultad IS NOT NULL AND dificultad <> 'Todas' GROUP BY dificultad ORDER BY porcentaje_medio DESC",
+        "recent":"SELECT jugador,puntuacion,total_preguntas,porcentaje,categoria,dificultad,fecha FROM workspace.quiz.resultados ORDER BY fecha DESC LIMIT 10"
+    }
     try:
         with closing(get_connection()) as cn:
-            with closing(cn.cursor()) as cur:
-                cur.execute("SELECT COUNT(*) AS partidas,COUNT(DISTINCT jugador) AS jugadores,ROUND(AVG(porcentaje),2) AS porcentaje_medio,MAX(puntuacion) AS mejor_puntuacion FROM workspace.quiz.resultados")
-                summary=rows_as_dicts(cur)
-                cur.execute("SELECT categoria,COUNT(*) AS partidas,ROUND(AVG(porcentaje),2) AS porcentaje_medio,MAX(porcentaje) AS mejor_porcentaje FROM workspace.quiz.resultados WHERE categoria IS NOT NULL AND categoria <> 'Todas' GROUP BY categoria ORDER BY porcentaje_medio DESC,partidas DESC")
-                categories=rows_as_dicts(cur)
-                cur.execute("SELECT dificultad,COUNT(*) AS partidas,ROUND(AVG(porcentaje),2) AS porcentaje_medio FROM workspace.quiz.resultados WHERE dificultad IS NOT NULL AND dificultad <> 'Todas' GROUP BY dificultad ORDER BY porcentaje_medio DESC")
-                difficulties=rows_as_dicts(cur)
-                cur.execute("SELECT jugador,puntuacion,total_preguntas,porcentaje,categoria,dificultad,fecha FROM workspace.quiz.resultados ORDER BY fecha DESC LIMIT 10")
-                recent=rows_as_dicts(cur)
-        return {"summary":summary,"categories":categories,"difficulties":difficulties,"recent":recent}
+            result={}
+            for name,q in queries.items():
+                with closing(cn.cursor()) as cur:
+                    cur.execute(q); result[name]=rows_as_dicts(cur)
+        return result
     except Exception:
-        logger.exception("Error consultando estadísticas"); raise HTTPException(503,"No se pudieron consultar las estadísticas.")
+        logger.exception("Error consultando estadísticas")
+        raise HTTPException(503,"No se pudieron consultar las estadísticas.")
 
 @app.get("/api/player/{jugador}/profile")
 def get_player_profile(jugador:str):
@@ -155,8 +178,10 @@ def get_player_profile(jugador:str):
             with closing(cn.cursor()) as cur:
                 cur.execute("SELECT COUNT(*) AS partidas,COALESCE(SUM(puntuacion),0) AS puntos_totales,COALESCE(MAX(puntuacion),0) AS mejor_puntuacion,COALESCE(MAX(porcentaje),0) AS mejor_porcentaje,COALESCE(ROUND(AVG(porcentaje),2),0) AS porcentaje_medio,COUNT(DISTINCT CASE WHEN categoria IS NOT NULL AND categoria <> 'Todas' THEN categoria END) AS categorias,COUNT(CASE WHEN porcentaje=100 THEN 1 END) AS perfectas,COUNT(CASE WHEN dificultad='Difícil' THEN 1 END) AS dificiles FROM workspace.quiz.resultados WHERE jugador=?",[jugador.strip()])
                 summary=rows_as_dicts(cur)[0]
+            with closing(cn.cursor()) as cur:
                 cur.execute("SELECT puntuacion,total_preguntas,porcentaje,categoria,dificultad,fecha FROM workspace.quiz.resultados WHERE jugador=? ORDER BY fecha DESC LIMIT 8",[jugador.strip()])
                 recent=rows_as_dicts(cur)
         return {"jugador":jugador.strip(),"summary":summary,"achievements":[],"recent":recent}
     except Exception:
-        logger.exception("Error consultando perfil"); raise HTTPException(503,"No se pudo consultar tu perfil.")
+        logger.exception("Error consultando perfil")
+        raise HTTPException(503,"No se pudo consultar tu perfil.")
