@@ -24,7 +24,7 @@ class GameCreate(BaseModel):
     dificultad:str="Todas"
     preguntas_ids:list[int]=Field(default_factory=list,max_length=10)
 
-app=FastAPI(title="OneToFour API",version="1.0.3")
+app=FastAPI(title="OneToFour API",version="1.0.4")
 allowed_origins=[x.strip() for x in os.getenv("CORS_ORIGINS","http://localhost:5173,http://127.0.0.1:5173").split(",") if x.strip()]
 app.add_middleware(CORSMiddleware,allow_origins=allowed_origins,allow_credentials=True,allow_methods=["*"],allow_headers=["*"])
 
@@ -66,15 +66,17 @@ def generate_quiz(request:GenerateQuizRequest):
             "Si el tema contiene una época, periodo, saga, género, competición o subtema, todas las preguntas deben respetarlo. "
             "Cuatro opciones, una correcta y explicación factual. Todas deben ser distintas. "
             "La propiedad categoria debe corresponder al tema principal y dificultad debe ser exactamente la solicitada.")
+    model=os.getenv("OPENAI_MODEL","gpt-5.6-luna")
     try:
         client=OpenAI(api_key=os.environ["OPENAI_API_KEY"])
-        response=client.responses.create(model=os.getenv("OPENAI_MODEL","gpt-5.6-luna"),input=[{"role":"system","content":"Eres el agente de preguntas de OneToFour. Respeta estrictamente el tema solicitado y sus subtemas."},{"role":"user","content":prompt}],text={"format":{"type":"json_schema","name":"onetoFour_quiz","strict":True,"schema":schema}})
+        response=client.responses.create(model=model,input=[{"role":"system","content":"Eres el agente de preguntas de OneToFour. Respeta estrictamente el tema solicitado y sus subtemas."},{"role":"user","content":prompt}],text={"format":{"type":"json_schema","name":"onetoFour_quiz","strict":True,"schema":schema}})
         data=json.loads(response.output_text)
         if len(data.get("preguntas",[]))!=10: raise ValueError("El agente no generó exactamente 10 preguntas")
-        return {"preguntas":data["preguntas"],"tema":request.tema,"dificultad":request.dificultad,"generado_por":os.getenv("OPENAI_MODEL","gpt-5.6-luna")}
-    except Exception:
-        logger.exception("Error generando preguntas")
-        raise HTTPException(502,"No se pudieron generar las preguntas con el agente.")
+        return {"preguntas":data["preguntas"],"tema":request.tema,"dificultad":request.dificultad,"generado_por":model}
+    except Exception as exc:
+        logger.exception("Error generando preguntas con OpenAI (modelo=%s)",model)
+        detail=f"No se pudieron generar las preguntas con el agente ({type(exc).__name__}: {str(exc)[:300]})."
+        raise HTTPException(502,detail)
 
 @app.get("/api/questions")
 def get_questions(categoria:str|None=Query(None,max_length=80),dificultad:str|None=Query(None,max_length=30),modo:str=Query("normal",pattern="^(normal|aleatorio)$"),limit:int=Query(10,ge=1,le=10),jugador:str|None=Query(None,max_length=30)):
