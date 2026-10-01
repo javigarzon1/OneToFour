@@ -1,7 +1,6 @@
 const API_URL=(import.meta.env.VITE_API_URL||'').replace(/\/$/,'')
 
 async function request(path,options={}){
-  if(!API_URL) throw new Error('El backend no está configurado. Define VITE_API_URL y reinicia el frontend.')
   const headers=new Headers(options.headers||{})
   const response=await fetch(API_URL+path,{...options,headers})
   if(!response.ok){
