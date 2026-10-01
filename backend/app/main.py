@@ -26,7 +26,7 @@ class GameCreate(BaseModel):
 
 app=FastAPI(title="OneToFour API",version="1.0.4")
 allowed_origins=[x.strip() for x in os.getenv("CORS_ORIGINS","http://localhost:5173,http://127.0.0.1:5173").split(",") if x.strip()]
-app.add_middleware(CORSMiddleware,allow_origins=allowed_origins,allow_credentials=True,allow_methods=["*"],allow_headers=["*"])
+app.add_middleware(CORSMiddleware,allow_origins=allowed_origins,allow_origin_regex=r"https://.*\.app\.github\.dev",allow_credentials=True,allow_methods=["*"],allow_headers=["*"])
 
 def get_connection():
     required=["DATABRICKS_SERVER_HOSTNAME","DATABRICKS_HTTP_PATH","DATABRICKS_TOKEN"]
