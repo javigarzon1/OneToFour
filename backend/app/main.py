@@ -514,32 +514,52 @@ def save_game(game: GameCreate):
     try:
         with closing(get_connection()) as connection:
             with closing(connection.cursor()) as cursor:
-                cursor.execute(
-                    "INSERT INTO workspace.quiz.resultados "
-                    "(partida_id,jugador,fecha,puntuacion,total_preguntas,porcentaje,categoria,dificultad) "
-                    "VALUES (?, ?, current_timestamp(), ?, ?, ?, ?, ?)",
-                    [
-                        partida_id,
-                        game.jugador.strip(),
-                        game.puntuacion,
-                        game.total_preguntas,
-                        game.porcentaje,
-                        game.categoria.strip(),
-                        game.dificultad.strip(),
-                    ],
-                )
-
-                for question_id in dict.fromkeys(game.preguntas_ids):
+                try:
                     cursor.execute(
-                        "INSERT INTO workspace.quiz.preguntas_usadas "
-                        "(jugador,pregunta_id,partida_id,fecha_uso) "
-                        "VALUES (?, ?, ?, current_timestamp())",
+                        "INSERT INTO workspace.quiz.resultados "
+                        "(partida_id,jugador,fecha,puntuacion,total_preguntas,porcentaje,categoria,dificultad) "
+                        "VALUES (?, ?, current_timestamp(), ?, ?, ?, ?, ?)",
                         [
-                            game.jugador.strip(),
-                            question_id,
                             partida_id,
+                            game.jugador.strip(),
+                            game.puntuacion,
+                            game.total_preguntas,
+                            game.porcentaje,
+                            game.categoria.strip(),
+                            game.dificultad.strip(),
                         ],
                     )
+                except Exception as exc:
+                    logger.exception(
+                        "Fallo insertando resultado en workspace.quiz.resultados"
+                    )
+                    raise RuntimeError(
+                        "No se pudo insertar la partida en workspace.quiz.resultados."
+                    ) from exc
+
+                for question_id in dict.fromkeys(game.preguntas_ids):
+                    try:
+                        cursor.execute(
+                            "INSERT INTO workspace.quiz.preguntas_usadas "
+                            "(jugador,pregunta_id,partida_id,fecha_uso) "
+                            "VALUES (?, ?, ?, current_timestamp())",
+                            [
+                                game.jugador.strip(),
+                                question_id,
+                                partida_id,
+                            ],
+                        )
+                    except Exception as exc:
+                        logger.exception(
+                            "Fallo insertando pregunta usada "
+                            "(pregunta_id=%s, partida_id=%s)",
+                            question_id,
+                            partida_id,
+                        )
+                        raise RuntimeError(
+                            "La partida se guardó, pero no se pudo registrar "
+                            "el historial de preguntas usadas."
+                        ) from exc
 
         return {
             "partida_id": partida_id,
@@ -551,14 +571,35 @@ def save_game(game: GameCreate):
             "dificultad": game.dificultad,
         }
     except Exception as exc:
-        logger.exception("Error guardando partida")
+        logger.exception("Error guardando partida en Databricks")
+        message = str(exc).lower()
         status_code = getattr(exc, "status_code", None)
-        if status_code in {401, 403} or "access token" in str(exc).lower() or "credential" in str(exc).lower():
+
+        if status_code in {401, 403} or "access token" in message or "credential" in message:
             raise HTTPException(
                 503,
                 "No se pudo guardar la partida porque las credenciales de Databricks no son válidas o no son compatibles con este conector.",
             )
-        raise HTTPException(503, "No se pudo guardar la partida en Databricks.")
+
+        if isinstance(exc, RuntimeError) and str(exc).startswith(
+            "La partida se guardó, pero"
+        ):
+            raise HTTPException(503, str(exc))
+
+        if isinstance(exc, RuntimeError) and str(exc).startswith(
+            "No se pudo insertar la partida"
+        ):
+            raise HTTPException(
+                503,
+                "Databricks responde, pero no se pudo insertar el resultado. "
+                "Comprueba el esquema de workspace.quiz.resultados y los permisos de escritura del warehouse.",
+            )
+
+        raise HTTPException(
+            503,
+            "No se pudo guardar la partida en Databricks. "
+            "Consulta los logs de FastAPI para ver el error de escritura concreto.",
+        )
 
 
 @app.get("/api/ranking")
