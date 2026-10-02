@@ -269,7 +269,7 @@ def test_agent_generates_ten_questions_with_groq():
             "opcion_b": "Opción B",
             "opcion_c": "Opción C",
             "opcion_d": "Opción D",
-            "correcta": "A",
+            "correcta": "ABCD"[(index - 1) % 4],
             "categoria": "Videojuegos",
             "dificultad": "Medio",
             "explicacion": "Explicación de prueba.",
