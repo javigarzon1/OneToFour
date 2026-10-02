@@ -25,8 +25,8 @@ jobs:
   refresh-question-banks:
     runs-on: ubuntu-latest
     env:
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      OPENAI_MODEL: gpt-5.6-luna
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      GROQ_MODEL: qwen/qwen3.8-27b
       DATABRICKS_SERVER_HOSTNAME: dbc-9ebf13e1-da41.cloud.databricks.com
       DATABRICKS_HTTP_PATH: /sql/1.0/warehouses/7bf58be4bdba98ad
       DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
@@ -45,15 +45,15 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt
 
-      - name: Generar preguntas
+      - name: Generar preguntas con Groq
         run: |
           if [ "${{ github.event_name }}" = "push" ]; then
-            python scripts/generate_question_banks.py --target 1200 --batch-size 200
+            python scripts/generate_question_banks.py --target 1200 --batch-size 20
           else
             python scripts/generate_question_banks.py \
               --target ${{ github.event.inputs.initial_target || '1200' }} \
               --new-per-topic ${{ github.event.inputs.weekly_new || '100' }} \
-              --batch-size 200
+              --batch-size 20
           fi
 
       - name: Validar calidad de los bancos
@@ -71,5 +71,5 @@ jobs:
           git config user.name "Javi Garzón"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add data/question_banks
-          git commit -m "Actualizar banco de preguntas con IA"
+          git commit -m "Actualizar banco de preguntas con Groq"
           git push
