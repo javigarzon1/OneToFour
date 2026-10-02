@@ -4,7 +4,7 @@ import {useRouter} from 'vue-router'
 import {generateQuiz,getAgentOptions,getPlayer} from '../services/api'
 
 const router=useRouter()
-const options=ref({categorias:[],dificultades:[],max_preguntas:10})
+const options=ref({categorias:[],dificultades:[],max_preguntas:10,proveedor:'Groq'})
 const numero=10,tema=ref('Historia'),subtema=ref('Años 90'),customTema=ref(''),dificultad=ref('Medio')
 const loading=ref(false),error=ref('')
 
@@ -32,9 +32,9 @@ async function generar(){
 
 <template>
 <section class="agent page">
-  <small>AGENTE IA · ONE TO FOUR</small>
+  <small>AGENTE IA · GROQ</small>
   <h1>Crea tu<br><em>propio quiz.</em></h1>
-  <p class="agent-intro">Elige una categoría, un tema concreto y la dificultad. La IA generará exactamente 10 preguntas nuevas para tu partida.</p>
+  <p class="agent-intro">Elige una categoría, un tema concreto y la dificultad. Groq generará exactamente 10 preguntas nuevas para tu partida.</p>
   <form class="card agent-card" @submit.prevent="generar">
     <label>Número de preguntas
       <input value="10" readonly>
