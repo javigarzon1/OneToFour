@@ -103,6 +103,24 @@ def rows_as_dicts(cursor):
     return [dict(zip(columns, row)) for row in cursor.fetchall()]
 
 
+def ensure_results_schema(connection):
+    """Alinea la tabla de resultados con el esquema requerido por la API."""
+    required_columns = {"partida_id", "jugador", "fecha", "puntuacion", "total_preguntas", "porcentaje", "categoria", "dificultad"}
+
+    with closing(connection.cursor()) as cursor:
+        cursor.execute("DESCRIBE TABLE workspace.quiz.resultados")
+        existing_columns = {str(row[0]).strip().lower() for row in cursor.fetchall()}
+
+    missing_columns = required_columns - existing_columns
+    for column, data_type in (("categoria", "STRING"), ("dificultad", "STRING")):
+        if column in missing_columns:
+            with closing(connection.cursor()) as cursor:
+                cursor.execute(
+                    f"ALTER TABLE workspace.quiz.resultados ADD COLUMNS ({column} {data_type})"
+                )
+            logger.info("Añadida columna faltante a resultados: %s", column)
+
+
 def build_achievements(summary):
     partidas = int(summary.get("partidas") or 0)
     perfectas = int(summary.get("perfectas") or 0)
@@ -513,6 +531,7 @@ def save_game(game: GameCreate):
 
     try:
         with closing(get_connection()) as connection:
+            ensure_results_schema(connection)
             with closing(connection.cursor()) as cursor:
                 try:
                     cursor.execute(
