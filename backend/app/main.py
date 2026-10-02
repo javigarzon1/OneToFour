@@ -205,8 +205,8 @@ def normalize_generated_text(value):
     if not isinstance(value, str):
         raise ValueError("El agente devolvió un campo que no es texto.")
 
-    value = re.sub(r"\\s+", " ", value).strip()
-    value = re.sub(r"\\s+([,.;:?!])", r"\\1", value)
+    value = re.sub(r"\s+", " ", value).strip()
+    value = re.sub(r"\s+([,.;:?!])", r"\1", value)
     return value
 
 
@@ -282,7 +282,7 @@ def validate_generated_questions(questions, request):
                 f"La pregunta {index} no respeta la categoría solicitada."
             )
 
-        question_key = re.sub(r"\\W+", " ", question["pregunta"].casefold()).strip()
+        question_key = re.sub(r"\W+", " ", question["pregunta"].casefold()).strip()
         if question_key in seen_questions:
             raise ValueError("El agente ha generado preguntas repetidas.")
         seen_questions.add(question_key)
