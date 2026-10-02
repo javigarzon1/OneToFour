@@ -85,10 +85,15 @@ def get_connection():
             "Faltan variables de entorno de Databricks: " + ", ".join(missing)
         )
 
+    token = os.environ["DATABRICKS_TOKEN"].strip()
+    if token.lower().startswith("bearer "):
+        token = token[7:].strip()
+
     return sql.connect(
-        server_hostname=os.environ["DATABRICKS_SERVER_HOSTNAME"],
-        http_path=os.environ["DATABRICKS_HTTP_PATH"],
-        access_token=os.environ["DATABRICKS_TOKEN"],
+        server_hostname=os.environ["DATABRICKS_SERVER_HOSTNAME"].strip(),
+        http_path=os.environ["DATABRICKS_HTTP_PATH"].strip(),
+        access_token=token,
+        autocommit=True,
     )
 
 
@@ -419,9 +424,15 @@ def save_game(game: GameCreate):
             "categoria": game.categoria,
             "dificultad": game.dificultad,
         }
-    except Exception:
+    except Exception as exc:
         logger.exception("Error guardando partida")
-        raise HTTPException(503, "No se pudo guardar la partida.")
+        status_code = getattr(exc, "status_code", None)
+        if status_code in {401, 403} or "access token" in str(exc).lower() or "credential" in str(exc).lower():
+            raise HTTPException(
+                503,
+                "No se pudo guardar la partida porque las credenciales de Databricks no son válidas o no son compatibles con este conector.",
+            )
+        raise HTTPException(503, "No se pudo guardar la partida en Databricks.")
 
 
 @app.get("/api/ranking")
