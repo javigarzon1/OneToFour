@@ -2,15 +2,20 @@ import json
 import logging
 import os
 import uuid
+from pathlib import Path
 from contextlib import closing
 
 from databricks import sql
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from groq import Groq
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger("onetoFour")
+
+# Carga automáticamente backend/.env en desarrollo local/Codespaces.
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 AI_CATEGORIES = [
     "Historia",
