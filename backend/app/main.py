@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 import uuid
 from pathlib import Path
 from contextlib import closing
@@ -199,6 +200,102 @@ def agent_options():
     }
 
 
+def normalize_generated_text(value):
+    """Normaliza texto generado sin alterar su significado."""
+    if not isinstance(value, str):
+        raise ValueError("El agente devolvió un campo que no es texto.")
+
+    value = re.sub(r"\\s+", " ", value).strip()
+    value = re.sub(r"\\s+([,.;:?!])", r"\\1", value)
+    return value
+
+
+def validate_generated_questions(questions, request):
+    """Valida y limpia las preguntas antes de enviarlas al frontend."""
+    if not isinstance(questions, list) or len(questions) != 10:
+        raise ValueError("El agente no generó exactamente 10 preguntas.")
+
+    expected_category = request.tema.split("—", 1)[0].strip()
+    if expected_category not in AI_CATEGORIES:
+        expected_category = request.tema.strip()
+
+    required_fields = (
+        "pregunta",
+        "opcion_a",
+        "opcion_b",
+        "opcion_c",
+        "opcion_d",
+        "correcta",
+        "categoria",
+        "dificultad",
+        "explicacion",
+    )
+    validated = []
+    seen_questions = set()
+    correct_distribution = {letter: 0 for letter in "ABCD"}
+
+    for index, raw_question in enumerate(questions, start=1):
+        if not isinstance(raw_question, dict):
+            raise ValueError(f"La pregunta {index} no tiene un formato válido.")
+
+        missing = [field for field in required_fields if field not in raw_question]
+        if missing:
+            raise ValueError(
+                f"La pregunta {index} no contiene todos los campos requeridos."
+            )
+
+        question = {
+            field: normalize_generated_text(raw_question[field])
+            for field in required_fields
+        }
+
+        if any(not question[field] for field in required_fields if field != "correcta"):
+            raise ValueError(f"La pregunta {index} contiene campos vacíos.")
+
+        if len(question["pregunta"]) < 10:
+            raise ValueError(f"La pregunta {index} es demasiado corta.")
+
+        options = [
+            question["opcion_a"],
+            question["opcion_b"],
+            question["opcion_c"],
+            question["opcion_d"],
+        ]
+        normalized_options = [option.casefold() for option in options]
+        if len(set(normalized_options)) != 4:
+            raise ValueError(f"La pregunta {index} contiene opciones repetidas.")
+
+        if question["correcta"] not in {"A", "B", "C", "D"}:
+            raise ValueError(f"La pregunta {index} tiene una respuesta correcta inválida.")
+
+        correct_index = "ABCD".index(question["correcta"])
+        if not options[correct_index]:
+            raise ValueError(f"La pregunta {index} no tiene una opción correcta válida.")
+
+        if question["dificultad"] != request.dificultad:
+            raise ValueError(
+                f"La pregunta {index} no respeta la dificultad solicitada."
+            )
+
+        if question["categoria"] != expected_category:
+            raise ValueError(
+                f"La pregunta {index} no respeta la categoría solicitada."
+            )
+
+        question_key = re.sub(r"\\W+", " ", question["pregunta"].casefold()).strip()
+        if question_key in seen_questions:
+            raise ValueError("El agente ha generado preguntas repetidas.")
+        seen_questions.add(question_key)
+
+        correct_distribution[question["correcta"]] += 1
+        validated.append(question)
+
+    if max(correct_distribution.values()) > 4:
+        raise ValueError("La distribución de respuestas correctas es demasiado sesgada.")
+
+    return validated
+
+
 @app.post("/api/agent/generate")
 def generate_quiz(request: GenerateQuizRequest):
     if not os.getenv("GROQ_API_KEY"):
@@ -252,56 +349,86 @@ def generate_quiz(request: GenerateQuizRequest):
         "additionalProperties": False,
     }
 
+    expected_category = request.tema.split("—", 1)[0].strip()
+    if expected_category not in AI_CATEGORIES:
+        expected_category = request.tema.strip()
+
     prompt = (
         f"Genera exactamente 10 preguntas exclusivamente sobre el tema: {request.tema}. "
-        f"Dificultad exacta: {request.dificultad}. Escribe todo en español. "
-        "No uses preguntas de otros temas. "
+        f"Dificultad exacta: {request.dificultad}. Escribe todo en español natural y correcto. "
+        f"La propiedad categoria debe ser exactamente: {expected_category}. "
+        f"La propiedad dificultad debe ser exactamente: {request.dificultad}. "
+        "No uses preguntas de otros temas ni información tangencial. "
         "Si el tema contiene una época, periodo, saga, género, competición o subtema, "
         "todas las preguntas deben respetarlo. "
-        "Cada pregunta debe tener cuatro opciones plausibles, una sola correcta "
-        "y una explicación factual breve. Todas deben ser distintas. "
-        "La propiedad categoria debe corresponder al tema principal y la propiedad "
-        "dificultad debe ser exactamente la solicitada. "
-        "Evita opiniones, rumores, ambigüedades y datos cuya respuesta dependa de "
-        "acontecimientos futuros."
+        "Cada pregunta debe tener cuatro opciones plausibles, diferentes entre sí, "
+        "una sola correcta y una explicación factual breve. Todas las preguntas deben ser distintas. "
+        "Distribuye las respuestas correctas entre A, B, C y D y no hagas que una misma letra "
+        "sea correcta más de 4 veces. "
+        "Evita opiniones, rumores, ambigüedades, preguntas trampa y datos cuya respuesta "
+        "dependa de acontecimientos futuros. "
+        "Revisa cuidadosamente nombres propios, fechas, unidades, porcentajes, escalas, "
+        "procesos científicos y relaciones causa-efecto: no confundas qué mide una escala, "
+        "qué proceso ocurre o qué magnitud representa. "
+        "Usa formulaciones estándar y precisas; evita afirmaciones científicas simplificadas "
+        "cuando puedan inducir a error. "
+        "No numeres las preguntas y no añadas comentarios fuera del JSON solicitado."
     )
 
     model = os.getenv("GROQ_MODEL", DEFAULT_GROQ_MODEL)
 
     try:
         client = Groq(api_key=os.environ["GROQ_API_KEY"])
-        response = client.chat.completions.create(
-            model=model,
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "Eres el agente de preguntas de OneToFour. "
-                        "Respeta estrictamente el tema y la dificultad solicitados. "
-                        "Genera contenido factual y apto para público general."
-                    ),
-                },
-                {"role": "user", "content": prompt},
-            ],
-            response_format={
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "onetoFour_quiz",
-                    "strict": True,
-                    "schema": schema,
-                },
-            },
-            temperature=0.7,
-            reasoning_effort="low",
-            max_completion_tokens=6000,
-        )
+        last_validation_error = None
 
-        content = response.choices[0].message.content or "{}"
-        data = json.loads(content)
+        for attempt in range(2):
+            current_prompt = prompt
+            if attempt == 1 and last_validation_error:
+                current_prompt += (
+                    "\\n\\nLa generación anterior no superó la validación de calidad. "
+                    "Genera de nuevo las 10 preguntas desde cero y corrige especialmente: "
+                    f"{last_validation_error}"
+                )
 
-        questions = data.get("preguntas", [])
-        if len(questions) != 10:
-            raise ValueError("El agente no generó exactamente 10 preguntas.")
+            response = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "Eres el agente de preguntas de OneToFour. "
+                            "Respeta estrictamente el tema, categoría y dificultad solicitados. "
+                            "Genera contenido factual, claro y apto para público general. "
+                            "Antes de responder, revisa internamente cada pregunta, opción, respuesta y explicación."
+                        ),
+                    },
+                    {"role": "user", "content": current_prompt},
+                ],
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "onetoFour_quiz",
+                        "strict": True,
+                        "schema": schema,
+                    },
+                },
+                temperature=0.45,
+                reasoning_effort="low",
+                max_completion_tokens=6500,
+            )
+
+            content = response.choices[0].message.content or "{}"
+
+            try:
+                data = json.loads(content)
+                questions = validate_generated_questions(data.get("preguntas", []), request)
+                break
+            except (json.JSONDecodeError, ValueError) as exc:
+                last_validation_error = str(exc)
+                if attempt == 1:
+                    raise
+        else:
+            raise ValueError("No se pudo validar la generación del agente.")
 
         return {
             "preguntas": questions,
@@ -333,6 +460,7 @@ def generate_quiz(request: GenerateQuizRequest):
             "No se pudieron generar las preguntas con el agente IA. "
             "Revisa la configuración de Groq o inténtalo de nuevo.",
         )
+
 
 
 @app.get("/api/questions")
