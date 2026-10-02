@@ -361,18 +361,16 @@ def generate_quiz(request: GenerateQuizRequest):
         "No uses preguntas de otros temas ni información tangencial. "
         "Si el tema contiene una época, periodo, saga, género, competición o subtema, "
         "todas las preguntas deben respetarlo. "
-        "Cada pregunta debe tener cuatro opciones plausibles, diferentes entre sí, "
-        "una sola correcta y una explicación factual breve. Todas las preguntas deben ser distintas. "
+        "Cada pregunta debe tener cuatro opciones plausibles y una sola correcta. "
+        "Usa preguntas y explicaciones concisas, factuales y distintas entre sí. "
         "Distribuye las respuestas correctas entre A, B, C y D y no hagas que una misma letra "
         "sea correcta más de 4 veces. "
         "Evita opiniones, rumores, ambigüedades, preguntas trampa y datos cuya respuesta "
         "dependa de acontecimientos futuros. "
-        "Revisa cuidadosamente nombres propios, fechas, unidades, porcentajes, escalas, "
-        "procesos científicos y relaciones causa-efecto: no confundas qué mide una escala, "
-        "qué proceso ocurre o qué magnitud representa. "
-        "Usa formulaciones estándar y precisas; evita afirmaciones científicas simplificadas "
-        "cuando puedan inducir a error. "
-        "No numeres las preguntas y no añadas comentarios fuera del JSON solicitado."
+        "Revisa nombres propios, fechas, unidades, porcentajes, escalas y relaciones causa-efecto. "
+        "Usa formulaciones estándar y precisas. "
+        "Mantén la pregunta y la explicación breves para evitar texto innecesario. "
+        "No numeres las preguntas ni añadas comentarios fuera del JSON."
     )
 
     model = os.getenv("GROQ_MODEL", DEFAULT_GROQ_MODEL)
@@ -414,7 +412,7 @@ def generate_quiz(request: GenerateQuizRequest):
                 },
                 temperature=0.45,
                 reasoning_effort="low",
-                max_completion_tokens=6500,
+                max_completion_tokens=4500,
             )
 
             content = response.choices[0].message.content or "{}"
