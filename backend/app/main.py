@@ -103,23 +103,6 @@ def rows_as_dicts(cursor):
     return [dict(zip(columns, row)) for row in cursor.fetchall()]
 
 
-def ensure_results_schema(connection):
-    """Alinea la tabla de resultados con el esquema requerido por la API."""
-    required_columns = {"partida_id", "jugador", "fecha", "puntuacion", "total_preguntas", "porcentaje", "categoria", "dificultad"}
-
-    with closing(connection.cursor()) as cursor:
-        cursor.execute("DESCRIBE TABLE workspace.quiz.resultados")
-        existing_columns = {str(row[0]).strip().lower() for row in cursor.fetchall()}
-
-    missing_columns = required_columns - existing_columns
-    for column, data_type in (("categoria", "STRING"), ("dificultad", "STRING")):
-        if column in missing_columns:
-            with closing(connection.cursor()) as cursor:
-                cursor.execute(
-                    f"ALTER TABLE workspace.quiz.resultados ADD COLUMNS ({column} {data_type})"
-                )
-            logger.info("Añadida columna faltante a resultados: %s", column)
-
 
 def build_achievements(summary):
     partidas = int(summary.get("partidas") or 0)
@@ -531,7 +514,6 @@ def save_game(game: GameCreate):
 
     try:
         with closing(get_connection()) as connection:
-            ensure_results_schema(connection)
             with closing(connection.cursor()) as cursor:
                 try:
                     cursor.execute(
@@ -594,10 +576,22 @@ def save_game(game: GameCreate):
         message = str(exc).lower()
         status_code = getattr(exc, "status_code", None)
 
-        if status_code in {401, 403} or "access token" in message or "credential" in message:
+        if status_code == 401 or "access token" in message or "invalid token" in message:
             raise HTTPException(
                 503,
-                "No se pudo guardar la partida porque las credenciales de Databricks no son válidas o no son compatibles con este conector.",
+                "No se pudo guardar la partida porque la credencial de Databricks no es válida o ha caducado.",
+            )
+
+        if (
+            status_code == 403
+            or "permission" in message
+            or "not authorized" in message
+            or "access denied" in message
+        ):
+            raise HTTPException(
+                503,
+                "Databricks permite consultar datos, pero la credencial no tiene permisos suficientes para guardar partidas. "
+                "Necesita SELECT y MODIFY (o INSERT) sobre workspace.quiz.resultados, además de USE CATALOG y USE SCHEMA.",
             )
 
         if isinstance(exc, RuntimeError) and str(exc).startswith(
