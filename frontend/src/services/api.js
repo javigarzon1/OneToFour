@@ -1,4 +1,4 @@
-const API_URL=(import.meta.env.VITE_API_URL||'http://localhost:8000').replace(/\/$/,'')
+const API_URL=(import.meta.env.VITE_API_URL??'').replace(/\/$/,'')
 
 async function request(path,options={}){
   const headers=new Headers(options.headers||{})
@@ -6,7 +6,7 @@ async function request(path,options={}){
   try{
     response=await fetch(API_URL+path,{...options,headers})
   }catch(e){
-    throw new Error(`No se puede conectar con el backend (${API_URL}). Comprueba que FastAPI está arrancado en el puerto 8000.`)
+    throw new Error(`No se puede conectar con el backend (${API_URL||'mismo dominio'}). Comprueba que la API está disponible.`)
   }
   if(!response.ok){
     let detail='Error en la API.'
