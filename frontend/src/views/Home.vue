@@ -11,7 +11,7 @@ function empezar(){
   router.push({path:'/jugar',query:{jugador:nombre,numero,modo:modo.value,categoria:modo.value==='aleatorio'?'Aleatorio':categoria.value,dificultad:dificultad.value}})
 }
 </script>
-<template><section class="home page"><div><small>QUIZ · ONE TO FOUR</small><h1>¿Cuánto<br><em>sabes?</em></h1><p>Pon a prueba tus conocimientos. Cuatro opciones, una respuesta correcta y una nueva partida cada vez.</p>
+<template><section class="home page"><div><small>JUEGA A· ONE TO FOUR</small><h1>¿Cuánto<br><em>sabes?</em></h1><p>Pon a prueba tus conocimientos. Cuatro opciones, una respuesta correcta y una nueva partida cada vez.</p>
 <form class="card" @submit.prevent="empezar">
 <label>Nombre del jugador<input v-model="jugador" maxlength="30" placeholder="Ej. Javi" required></label>
 <div class="grid"><label>Preguntas<input value="10" readonly></label><label>Modo de juego<select v-model="modo"><option value="normal">Por tema</option><option value="aleatorio">Aleatorio · mezcla de temas</option></select></label></div>
