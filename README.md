@@ -152,6 +152,22 @@ npm run dev
 
 Abre el frontend en `http://localhost:5173`.
 
+## Producción en Vercel
+
+El proyecto usa Vercel Services para publicar Vue y FastAPI en un único despliegue.
+
+Las variables de producción de Databricks deben ser exactamente:
+
+~~~text
+DATABRICKS_SERVER_HOSTNAME=dbc-9ebf13e1-da41.cloud.databricks.com
+DATABRICKS_HTTP_PATH=/sql/1.0/warehouses/7bf58be4bdba98ad
+DATABRICKS_TOKEN=<token>
+~~~
+
+`DATABRICKS_SERVER_HOSTNAME` es solo el hostname del workspace. No debe contener el HTTP path del Warehouse. `DATABRICKS_HTTP_PATH` contiene exclusivamente la ruta `/sql/1.0/warehouses/...`.
+
+Después de modificar variables de entorno en Vercel hay que crear un nuevo despliegue para que las funciones de FastAPI reciban los valores actualizados.
+
 ## Banco de preguntas y anti-repetición
 
 OneToFour dispone de bancos independientes en `data/question_banks/`.
@@ -245,4 +261,3 @@ OneToFour/
     ├── sync_question_banks.py
     └── validate_question_banks.py
 ~~~
-
