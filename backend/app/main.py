@@ -170,14 +170,49 @@ def health():
 
 @app.get("/api/health/databricks")
 def databricks_health():
+    configured = {
+        "server_hostname": bool(os.getenv("DATABRICKS_SERVER_HOSTNAME")),
+        "http_path": bool(os.getenv("DATABRICKS_HTTP_PATH")),
+        "token": bool(os.getenv("DATABRICKS_TOKEN")),
+    }
+
     try:
         with closing(get_connection()) as connection:
             with closing(connection.cursor()) as cursor:
                 cursor.execute("SELECT 1 AS ok")
-                return {"status": "ok", "databricks": cursor.fetchone()[0] == 1}
-    except Exception:
+                return {
+                    "status": "ok",
+                    "databricks": cursor.fetchone()[0] == 1,
+                    "configured": configured,
+                }
+    except Exception as exc:
         logger.exception("Error conectando con Databricks")
-        raise HTTPException(503, "Databricks no disponible.")
+        message = str(exc).lower()
+        if not all(configured.values()):
+            category = "configuration_missing"
+        elif (
+            "credential" in message
+            or "authentication" in message
+            or "unauthorized" in message
+            or "access token" in message
+            or getattr(exc, "status_code", None) in {401, 403}
+        ):
+            category = "authentication_or_authorization"
+        elif isinstance(exc, TimeoutError) or "timeout" in message:
+            category = "timeout"
+        else:
+            category = "connection_error"
+
+        raise HTTPException(
+            503,
+            {
+                "status": "error",
+                "databricks": False,
+                "configured": configured,
+                "error_category": category,
+                "error_type": type(exc).__name__,
+            },
+        )
 
 
 @app.get("/api/health/ai")
