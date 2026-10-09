@@ -320,7 +320,9 @@ def test_questions_random_mode_uses_all_topics():
 
     assert response.status_code == 200
     assert "workspace.quiz.preguntas" in cursor.executed
-    assert "ORDER BY rand()" in cursor.executed
+    assert "ORDER BY CASE WHEN u.pregunta_id IS NULL THEN 0 ELSE 1 END, rand()" in cursor.executed
+    assert "p.categoria = ?" not in cursor.executed
+    assert cursor.params == ["Jugador", 5]
 
 
 def test_player_profile():
@@ -381,7 +383,7 @@ def test_player_profile():
     assert body["recent"][0]["categoria"] == "Ciencia"
 
 
-def test_questions_exclude_player_history():
+def test_questions_prioritize_unused_but_allow_repeats():
     cursor = FakeCursor(rows=[], columns=[])
 
     with patch(
@@ -391,10 +393,10 @@ def test_questions_exclude_player_history():
         response = client.get("/api/questions?limit=5")
 
     assert response.status_code == 200
-    assert any(
-        "preguntas_usadas" in query for query in cursor.executed_history
-    )
-    assert "u.jugador = ?" in cursor.executed
+    assert "workspace.quiz.preguntas_usadas" in cursor.executed
+    assert "WHERE jugador = ?" in cursor.executed
+    assert "u.pregunta_id IS NULL THEN 0 ELSE 1 END" in cursor.executed
+    assert "NOT EXISTS" not in cursor.executed
     assert cursor.params == ["Jugador", 5]
 
 
