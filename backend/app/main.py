@@ -505,8 +505,11 @@ def get_questions(
     limit: int = Query(10, ge=1, le=10),
     jugador: str | None = Query(None, max_length=30),
 ):
+    # Prioriza preguntas que este jugador aún no ha visto, pero no deja
+    # la partida vacía cuando ya ha agotado el catálogo.
+    player_name = (jugador or "Jugador").strip() or "Jugador"
     filters = []
-    params = []
+    params = [player_name]
 
     if modo == "normal" and categoria and categoria not in ("Todas", "Aleatorio"):
         filters.append("p.categoria = ?")
@@ -516,20 +519,18 @@ def get_questions(
         filters.append("p.dificultad = ?")
         params.append(dificultad)
 
-    filters.append(
-        "NOT EXISTS ("
-        "SELECT 1 FROM workspace.quiz.preguntas_usadas u "
-        "WHERE u.jugador = ? AND u.pregunta_id = p.id"
-        ")"
-    )
-    params.append((jugador or "Jugador").strip())
-
+    where_clause = " AND ".join(filters) if filters else "1 = 1"
     query = (
+        "WITH used_questions AS ("
+        "SELECT DISTINCT pregunta_id "
+        "FROM workspace.quiz.preguntas_usadas WHERE jugador = ?"
+        ") "
         "SELECT p.id,p.pregunta,p.opcion_a,p.opcion_b,p.opcion_c,p.opcion_d,"
         "p.correcta,p.categoria,p.dificultad,p.explicacion "
-        "FROM workspace.quiz.preguntas p WHERE "
-        + " AND ".join(filters)
-        + " ORDER BY rand() LIMIT ?"
+        "FROM workspace.quiz.preguntas p "
+        "LEFT JOIN used_questions u ON u.pregunta_id = p.id "
+        "WHERE " + where_clause
+        + " ORDER BY CASE WHEN u.pregunta_id IS NULL THEN 0 ELSE 1 END, rand() LIMIT ?"
     )
     params.append(limit)
 
