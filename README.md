@@ -126,6 +126,7 @@ uvicorn app.main:app --reload --port 8000
 Comprobaciones:
 
 - `http://localhost:8000/health`
+- En `/api/health/databricks`, si Databricks falla, la API indica la categoría del fallo y si falta alguna variable (sin mostrar credenciales).
 - `http://localhost:8000/api/health/databricks`
 - `http://localhost:8000/api/health/ai`
 - `http://localhost:8000/docs`
