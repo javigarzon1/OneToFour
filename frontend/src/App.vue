@@ -5,7 +5,7 @@ import {RouterLink,RouterView} from 'vue-router'
 <div class="app">
 <header>
   <RouterLink class="brand" to="/"><b>1</b> OneToFour</RouterLink>
-  <nav><RouterLink to="/">Inicio</RouterLink><RouterLink to="/jugar">Jugar</RouterLink><RouterLink to="/ranking">Ranking</RouterLink><RouterLink to="/estadisticas">Estadísticas</RouterLink><RouterLink to="/perfil">Mi progreso</RouterLink><RouterLink to="/agente">Agente IA</RouterLink></nav>
+  <nav><RouterLink to="/">Inicio</RouterLink><RouterLink to="/agente">Jugar</RouterLink><RouterLink to="/ranking">Ranking</RouterLink><RouterLink to="/estadisticas">Estadísticas</RouterLink><RouterLink to="/perfil">Mi progreso</RouterLink></nav>
 </header>
 <main><RouterView/></main>
 <footer><span>OneToFour</span><span> © 2026 Creada por 

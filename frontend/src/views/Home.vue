@@ -8,7 +8,7 @@ const numero=10,modo=ref('normal'),categoria=ref('Todas'),dificultad=ref('Todas'
 function empezar(){
   const nombre=jugador.value.trim()||'Jugador'
   setPlayer(nombre)
-  router.push({path:'/jugar',query:{jugador:nombre,numero,modo:modo.value,categoria:modo.value==='aleatorio'?'Aleatorio':categoria.value,dificultad:dificultad.value}})
+  router.push('/agente')
 }
 </script>
 <template><section class="home page"><div><small>JUEGA A· ONE TO FOUR</small><h1>¿Cuánto<br><em>sabes?</em></h1><p>Pon a prueba tus conocimientos. Cuatro opciones, una respuesta correcta y una nueva partida cada vez.</p>
