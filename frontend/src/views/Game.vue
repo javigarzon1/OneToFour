@@ -3,54 +3,69 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AnswerButton from '../components/AnswerButton.vue'
 import ProgressBar from '../components/ProgressBar.vue'
-import { getQuestions, saveGame } from '../services/api'
+import { answerGame, finishGame, getGame, getPlayer, startGame } from '../services/api'
+
+// El servidor guarda las preguntas de la partida, corrige cada respuesta y
+// calcula la puntuación final. Aquí sólo se muestra el estado y se envían respuestas.
+
+const TIME_PER_QUESTION = 15
+const POINTS = { Fácil: 1, Medio: 2, Difícil: 3 }
 
 const route = useRoute()
 const router = useRouter()
+
 const loading = ref(true)
 const error = ref('')
+const answerError = ref('')
 const saveError = ref('')
+const checking = ref(false)
 const saving = ref(false)
+
+const gameId = ref('')
+const player = ref(route.query.jugador || getPlayer())
+const category = ref('')
+const difficulty = ref('')
 const questions = ref([])
 const index = ref(0)
-const selected = ref('')
 const score = ref(0)
-const locked = ref(false)
 const streak = ref(0)
-const maxStreak = ref(0)
-const timeLeft = ref(15)
-const correctAnswers = ref(0)
-const timeout = ref(false)
-let timer = null
 
-const player = computed(() => route.query.jugador || 'Jugador')
-const category = computed(() => route.query.modo === 'aleatorio' ? 'Mixto' : (route.query.categoria || 'Todas'))
-const difficulty = computed(() => route.query.dificultad || 'Todas')
+const selected = ref('')
+const locked = ref(false)
+const timeout = ref(false)
+const review = ref(null) // solución y puntos devueltos por el servidor tras responder
+const timeLeft = ref(TIME_PER_QUESTION)
+let timer = null
+const pendingAnswer = ref(null) // última respuesta que no llegó a confirmarse (para reintentar)
+
 const question = computed(() => questions.value[index.value])
 const total = computed(() => questions.value.length)
-const answers = computed(() => question.value ? [
-  ['A', question.value.opcion_a],
-  ['B', question.value.opcion_b],
-  ['C', question.value.opcion_c],
-  ['D', question.value.opcion_d],
-] : [])
-const difficultyPoints = computed(() => question.value?.dificultad === 'Difícil' ? 3 : question.value?.dificultad === 'Medio' ? 2 : 1)
-const maxScore = computed(() => questions.value.reduce((sum, q) => sum + (q.dificultad === 'Difícil' ? 3 : q.dificultad === 'Medio' ? 2 : 1), 0))
-const percent = computed(() => maxScore.value ? Math.round(score.value / maxScore.value * 100) : 0)
-const timerProgress = computed(() => String(Math.max(0, timeLeft.value / 15 * 100)) + '%')
-const isCorrect = computed(() => locked.value && !timeout.value && selected.value === question.value?.correcta)
-const correctAnswerText = computed(() => {
-  const letter = question.value?.correcta
-  return answers.value.find(([key]) => key === letter)?.[1] || ''
-})
+const answers = computed(() =>
+  question.value
+    ? [
+        ['A', question.value.opcion_a],
+        ['B', question.value.opcion_b],
+        ['C', question.value.opcion_c],
+        ['D', question.value.opcion_d],
+      ]
+    : [],
+)
+const difficultyPoints = computed(() => POINTS[question.value?.dificultad] ?? 1)
+const timerProgress = computed(() => `${Math.max(0, (timeLeft.value / TIME_PER_QUESTION) * 100)}%`)
+const isCorrect = computed(() => Boolean(review.value?.acierto))
+const correctAnswerText = computed(
+  () => answers.value.find(([letter]) => letter === review.value?.correcta)?.[1] || '',
+)
 const feedback = computed(() => {
-  if (!locked.value) return ''
+  if (!review.value) return ''
   if (timeout.value) return 'Se acabó el tiempo.'
   return isCorrect.value ? '¡Respuesta correcta!' : 'Respuesta incorrecta.'
 })
-const answerState = (letter) => locked.value
-  ? (letter === question.value?.correcta ? 'correct' : letter === selected.value ? 'wrong' : '')
-  : ''
+const answerState = (letter) => {
+  if (!review.value) return ''
+  if (letter === review.value.correcta) return 'correct'
+  return letter === selected.value ? 'wrong' : ''
+}
 
 function stopTimer() {
   if (timer) clearInterval(timer)
@@ -59,7 +74,7 @@ function stopTimer() {
 
 function startTimer() {
   stopTimer()
-  timeLeft.value = 15
+  timeLeft.value = TIME_PER_QUESTION
   timer = setInterval(() => {
     if (locked.value) {
       stopTimer()
@@ -70,32 +85,75 @@ function startTimer() {
   }, 1000)
 }
 
-function answer(letter, expired = false) {
-  if (locked.value || !question.value) return
+function applyState(state) {
+  gameId.value = state.partida_id
+  player.value = state.jugador
+  category.value = state.categoria
+  difficulty.value = state.dificultad
+  questions.value = state.preguntas
+  score.value = state.puntuacion
+  streak.value = state.racha
+  index.value = Math.min(state.respondidas, Math.max(state.preguntas.length - 1, 0))
+}
+
+function resetQuestion() {
+  selected.value = ''
+  locked.value = false
+  timeout.value = false
+  review.value = null
+  answerError.value = ''
+  pendingAnswer.value = null
+}
+
+async function answer(letter, expired = false) {
+  if (locked.value || checking.value || !question.value) return
   stopTimer()
   selected.value = letter
   timeout.value = expired
   locked.value = true
-  saveError.value = ''
+  checking.value = true
+  answerError.value = ''
+  pendingAnswer.value = { letter, expired }
 
-  if (!expired && letter === question.value.correcta) {
-    score.value += difficultyPoints.value
-    correctAnswers.value++
-    streak.value++
-    maxStreak.value = Math.max(maxStreak.value, streak.value)
-  } else {
-    streak.value = 0
+  try {
+    const result = await answerGame(gameId.value, index.value, expired ? '' : letter)
+    review.value = result
+    score.value = result.puntuacion
+    streak.value = result.racha
+    pendingAnswer.value = null
+  } catch (e) {
+    answerError.value = e instanceof Error ? e.message : 'No se pudo comprobar la respuesta.'
+    // 409: el servidor ya tenía esa respuesta (se perdió la confirmación). Se resincroniza.
+    if (e?.status === 409) await resync()
+  } finally {
+    checking.value = false
+  }
+}
+
+function retryAnswer() {
+  if (!pendingAnswer.value) return
+  const { letter, expired } = pendingAnswer.value
+  locked.value = false
+  answer(letter, expired)
+}
+
+async function resync() {
+  try {
+    const state = await getGame(gameId.value)
+    applyState(state)
+    resetQuestion()
+    if (state.respondidas >= state.preguntas.length) await finish()
+    else startTimer()
+  } catch (e) {
+    answerError.value = e instanceof Error ? e.message : 'No se pudo recuperar la partida.'
   }
 }
 
 function continueQuestion() {
-  if (!locked.value || saving.value) return
-  saveError.value = ''
+  if (!review.value || saving.value) return
   if (index.value + 1 < total.value) {
     index.value++
-    selected.value = ''
-    locked.value = false
-    timeout.value = false
+    resetQuestion()
     startTimer()
   } else {
     finish()
@@ -107,18 +165,16 @@ async function finish() {
   saving.value = true
   saveError.value = ''
   try {
-    await saveGame({
-      jugador: player.value,
-      puntuacion: score.value,
-      total_preguntas: total.value,
-      porcentaje: percent.value,
-      categoria: category.value,
-      dificultad: difficulty.value,
-      preguntas_ids: route.query.ai === '1' ? [] : questions.value.map(q => q.id),
-    })
+    const result = await finishGame(gameId.value)
     await router.push({
       path: '/resultado',
-      query: { jugador: player.value, score: score.value, total: total.value, porcentaje: percent.value, racha: maxStreak.value },
+      query: {
+        jugador: result.jugador,
+        score: result.puntuacion,
+        total: result.total_preguntas,
+        porcentaje: result.porcentaje,
+        racha: result.racha,
+      },
     })
   } catch (e) {
     saveError.value = e instanceof Error ? e.message : 'No se pudo guardar la partida.'
@@ -128,49 +184,34 @@ async function finish() {
 }
 
 async function load() {
+  let complete = false
   try {
-    if (route.query.ai === '1') {
-      const stored = sessionStorage.getItem('onetoFour_ai_quiz')
-      if (!stored) throw new Error('No se encontró la partida generada por el agente.')
-      questions.value = JSON.parse(stored).slice(0, 10)
-      sessionStorage.removeItem('onetoFour_ai_quiz')
+    if (route.query.partida) {
+      // Partida ya creada (generada por el agente o retomada al recargar la página).
+      const state = await getGame(route.query.partida)
+      applyState(state)
+      complete = state.respondidas >= state.preguntas.length
     } else {
-      const randomMode = route.query.modo === 'aleatorio'
-      const pool = await getQuestions({
-        modo: randomMode ? 'aleatorio' : 'normal',
-        categoria: randomMode ? undefined : route.query.categoria,
-        dificultad: route.query.dificultad,
-        limit: 10,
+      const state = await startGame({
         jugador: player.value,
+        categoria: route.query.categoria || 'Todas',
+        dificultad: route.query.dificultad || 'Todas',
+        modo: route.query.modo === 'aleatorio' ? 'aleatorio' : 'normal',
       })
-      if (randomMode) {
-        const shuffled = [...pool].sort(() => Math.random() - 0.5)
-        const byCategory = new Map()
-        shuffled.forEach((q) => {
-          if (!byCategory.has(q.categoria)) byCategory.set(q.categoria, [])
-          byCategory.get(q.categoria).push(q)
-        })
-        const mixed = []
-        while (mixed.length < 10 && byCategory.size) {
-          for (const [categoryName, items] of byCategory) {
-            const q = items.shift()
-            if (q) mixed.push(q)
-            if (!items.length) byCategory.delete(categoryName)
-            if (mixed.length === 10) break
-          }
-        }
-        questions.value = mixed
-      } else {
-        questions.value = pool.slice(0, 10)
-      }
+      applyState(state)
+      // La partida queda en la URL: si se recarga, se retoma donde estaba.
+      await router.replace({ query: { partida: state.partida_id } })
     }
     if (!questions.value.length) error.value = 'No hay preguntas para estos filtros.'
-    else startTimer()
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'No se pudo cargar la partida.'
   } finally {
     loading.value = false
   }
+
+  if (error.value) return
+  if (complete) await finish()
+  else startTimer()
 }
 
 onMounted(load)
@@ -227,22 +268,28 @@ onBeforeUnmount(stopTimer)
           />
         </div>
 
-        <div v-if="locked" class="answer-review" :class="{ success: isCorrect }" aria-live="polite">
+        <div v-if="review" class="answer-review" :class="{ success: isCorrect }" aria-live="polite">
           <div class="answer-review-heading">
             <strong>{{ feedback }}</strong>
             <span v-if="timeout" class="review-chip">Tiempo agotado</span>
-            <span v-else-if="isCorrect" class="review-chip">+{{ difficultyPoints }} puntos</span>
+            <span v-else-if="isCorrect" class="review-chip">+{{ review.puntos }} puntos</span>
           </div>
-          <p class="correct-answer"><span>Respuesta correcta</span><strong>{{ question.correcta }} · {{ correctAnswerText }}</strong></p>
-          <p v-if="question.explicacion" class="answer-explanation">{{ question.explicacion }}</p>
+          <p class="correct-answer"><span>Respuesta correcta</span><strong>{{ review.correcta }} · {{ correctAnswerText }}</strong></p>
+          <p v-if="review.explicacion" class="answer-explanation">{{ review.explicacion }}</p>
         </div>
 
         <div class="question-actions">
           <p v-if="!locked" class="answer-hint">Selecciona una opción antes de que termine el tiempo.</p>
-          <span v-else class="answer-hint">{{ index + 1 < total ? '¿Listo para la siguiente?' : 'Última pregunta completada.' }}</span>
-          <button v-if="locked" class="primary continue-button" type="button" :disabled="saving" @click="continueQuestion">
+          <span v-else-if="checking" class="answer-hint" role="status">Comprobando respuesta…</span>
+          <span v-else-if="review" class="answer-hint">{{ index + 1 < total ? '¿Listo para la siguiente?' : 'Última pregunta completada.' }}</span>
+          <button v-if="review" class="primary continue-button" type="button" :disabled="saving" @click="continueQuestion">
             {{ saving ? 'Guardando…' : index + 1 < total ? 'Continuar' : 'Ver resultados' }} <span>→</span>
           </button>
+        </div>
+
+        <div v-if="answerError" class="save-error" role="alert">
+          <span>{{ answerError }}</span>
+          <button v-if="pendingAnswer" class="secondary" type="button" :disabled="checking" @click="retryAnswer">Reintentar</button>
         </div>
         <div v-if="saveError" class="save-error" role="alert">
           <span>{{ saveError }}</span>

@@ -1,29 +1,27 @@
 # OneToFour API
 
-Backend FastAPI para conectar Vue 3 con Azure Databricks y Groq.
+Backend FastAPI para conectar Vue 3 con PostgreSQL (Neon) y Groq.
 
 ## Requisitos
 
-- Python 3.10+
-- SQL Warehouse de Azure Databricks
+- Python 3.12
+- Una base de datos PostgreSQL (Neon, plan gratuito)
 - Una clave de Groq para el agente IA
 
 ## Configuración
 
-Copia `.env.example` a `.env` y define las variables de Databricks, Groq y `CORS_ORIGINS`.
+Copia `.env.example` a `.env`:
 
 ~~~text
-DATABRICKS_SERVER_HOSTNAME=...
-DATABRICKS_HTTP_PATH=...
-DATABRICKS_TOKEN=...
+DATABASE_URL=postgresql://usuario:contrasena@ep-xxxx-pooler.region.aws.neon.tech/neondb?sslmode=require
 GROQ_API_KEY=...
 GROQ_MODEL=qwen/qwen3.8-27b
 CORS_ORIGINS=http://localhost:5173
 ~~~
 
-No subas `.env` a GitHub.
+No subas `.env` a GitHub. Las claves se quedan en el backend y nunca se envían al navegador.
 
-La API usa Groq como proveedor de generación. La clave se queda en el backend y nunca se envía al navegador.
+Crea las tablas con `sql/postgres/01_schema.sql` y carga el banco con `sql/postgres/02_seed_preguntas.sql`.
 
 ## Instalación
 
@@ -31,38 +29,42 @@ Desde `backend/`:
 
 ~~~bash
 python -m venv .venv
-# Windows
-.venv\\Scripts\\activate
-# Linux/macOS
-source .venv/bin/activate
-
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ~~~
 
+## Estructura
+
+- `app/main.py`: rutas.
+- `app/game.py`: reglas del juego (puntos, corrección, resultado). Sin base de datos.
+- `app/db.py`: conexión a PostgreSQL.
+- `app/limits.py`: utilidades del límite de uso.
+
 ## Endpoints
 
 - `GET /health`
-- `GET /api/health/databricks`
+- `GET /api/health/db`
 - `GET /api/health/ai`
-- `GET /api/questions`
-- `POST /api/games`
-- `GET /api/ranking`
+- `POST /api/games/start`: crea una partida con preguntas del banco.
+- `GET /api/games/{id}`: estado de la partida (para retomarla).
+- `POST /api/games/{id}/answer`: corrige una respuesta.
+- `POST /api/games/{id}/finish`: cierra la partida; la puntuación la calcula el servidor.
+- `GET /api/ranking`: mejor partida de cada jugador.
 - `GET /api/stats`
 - `GET /api/player/{jugador}/profile`
 - `GET /api/agent/options`
-- `POST /api/agent/generate`
+- `POST /api/agent/generate`: genera 10 preguntas con Groq y crea la partida. Limitado por IP y por día.
 
-El endpoint de generación devuelve exactamente 10 preguntas en JSON estructurado y mantiene el mismo contrato que consume Vue.
-
-La API usa consultas parametrizadas para filtros y escrituras y valida la salida del agente con JSON Schema estricto.
+Las consultas usan parámetros (`%s`). La salida del agente se valida antes de guardarse.
 
 Documentación interactiva: `/docs`.
 
-## Comprobación del agente
+## Tests
+
+Desde la raíz del repositorio:
 
 ~~~bash
-curl http://localhost:8000/api/health/ai
+pip install -r backend/requirements.txt
+PYTHONPATH=. pytest -q backend/tests
 ~~~
-
-Debe indicar `provider: Groq`, el modelo configurado y si `GROQ_API_KEY` está presente.

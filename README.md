@@ -2,7 +2,7 @@
 
 **Autor: Javi Garzón**
 
-Juego de preguntas y respuestas con cuatro opciones, desarrollado con **Vue 3**, **FastAPI**, **Python**, **Azure Databricks**, **Delta Lake** y un agente IA sobre **Groq**.
+Juego de preguntas y respuestas con cuatro opciones, desarrollado con **Vue 3**, **FastAPI**, **Python**, **PostgreSQL (Neon)** y un agente IA sobre **Groq**.
 
 ## Arquitectura
 
@@ -14,25 +14,23 @@ Vue 3 + Vite
 FastAPI
   ┌───┴─────────────────────┐
   │                         │
-  │ Groq API                │ Databricks SQL
+  │ Groq API                │ PostgreSQL (Neon)
   ▼                         ▼
-Agente IA                 SQL Warehouse
-                              │
-                              ▼
-                          Delta Lake
-                           ├── quiz.preguntas
-                           ├── quiz.resultados
-                           └── quiz.preguntas_usadas
+Agente IA                 quiz.preguntas
+                          quiz.partidas
+                          quiz.resultados
+                          quiz.preguntas_usadas
+                          quiz.limites_uso
 ~~~
 
-El navegador nunca recibe las credenciales de Groq ni de Databricks. El backend mantiene esas claves en variables de entorno.
+El navegador nunca recibe las credenciales de Groq ni de la base de datos. El backend mantiene esas claves en variables de entorno.
 
 ## Funcionalidades
 
 - Temporizador de 15 segundos por pregunta.
 - Puntuación por dificultad y sistema de rachas.
 - Feedback inmediato con explicación de la respuesta.
-- Estadísticas agregadas desde Databricks por categoría y dificultad.
+- Estadísticas agregadas por categoría y dificultad.
 - Agente IA con Groq para crear partidas personalizadas por tema y dificultad.
 - Generación de exactamente 10 preguntas por partida IA.
 - Temas de videojuegos con selección de periodo, incluido **Años 90**.
@@ -40,7 +38,9 @@ El navegador nunca recibe las credenciales de Groq ni de Databricks. El backend 
 - Inicio de partidas con nombre del jugador.
 - Modo aleatorio que mezcla preguntas de diferentes categorías.
 - Filtros por categoría y dificultad.
-- Persistencia de cada partida en Delta Lake.
+- La puntuación la calcula el servidor: el navegador no recibe las soluciones por adelantado ni envía su propio resultado.
+- Límite de uso del agente IA por IP y por día.
+- Persistencia de cada partida en PostgreSQL.
 - Anti-repetición de preguntas del banco por jugador.
 - Ranking de mejores resultados.
 - Logros calculados desde el historial del jugador.
@@ -86,11 +86,9 @@ Ejemplo:
 
 Las preguntas generadas se guardan temporalmente en el navegador para iniciar la partida sin exponer la clave de Groq.
 
-## 1. Preparar Azure Databricks
+## 1. Preparar la base de datos (Neon)
 
-Ejecuta `sql/01_crear_tablas.sql` en un SQL Warehouse de Azure Databricks.
-
-La tabla principal de preguntas es `workspace.quiz.preguntas`. Las partidas se guardan en `workspace.quiz.resultados` y el historial de anti-repetición en `workspace.quiz.preguntas_usadas`.
+Crea un proyecto en Neon y ejecuta, en este orden, `sql/postgres/01_schema.sql` y `sql/postgres/02_seed_preguntas.sql`. Son idempotentes. La guía completa está en [VERCEL.md](VERCEL.md).
 
 ## 2. Arrancar la API
 
@@ -99,7 +97,7 @@ Desde `backend/`:
 ~~~bash
 python -m venv .venv
 # Windows
-.venv\\Scripts\\activate
+.venv\Scripts\activate
 # Linux/macOS
 source .venv/bin/activate
 
@@ -109,9 +107,7 @@ pip install -r requirements.txt
 Copia `.env.example` a `.env` y completa:
 
 ~~~text
-DATABRICKS_SERVER_HOSTNAME=...
-DATABRICKS_HTTP_PATH=...
-DATABRICKS_TOKEN=...
+DATABASE_URL=postgresql://usuario:contrasena@ep-xxxx-pooler.region.aws.neon.tech/neondb?sslmode=require
 GROQ_API_KEY=...
 GROQ_MODEL=qwen/qwen3.8-27b
 CORS_ORIGINS=http://localhost:5173
@@ -126,8 +122,7 @@ uvicorn app.main:app --reload --port 8000
 Comprobaciones:
 
 - `http://localhost:8000/health`
-- En `/api/health/databricks`, si Databricks falla, la API indica la categoría del fallo y si falta alguna variable (sin mostrar credenciales).
-- `http://localhost:8000/api/health/databricks`
+- `http://localhost:8000/api/health/db`: si la base de datos falla, indica la categoría del fallo (sin mostrar credenciales).
 - `http://localhost:8000/api/health/ai`
 - `http://localhost:8000/docs`
 
@@ -155,19 +150,7 @@ Abre el frontend en `http://localhost:5173`.
 
 ## Producción en Vercel
 
-El proyecto usa Vercel Services para publicar Vue y FastAPI en un único despliegue.
-
-Las variables de producción de Databricks deben ser exactamente:
-
-~~~text
-DATABRICKS_SERVER_HOSTNAME=dbc-9ebf13e1-da41.cloud.databricks.com
-DATABRICKS_HTTP_PATH=/sql/1.0/warehouses/7bf58be4bdba98ad
-DATABRICKS_TOKEN=<token>
-~~~
-
-`DATABRICKS_SERVER_HOSTNAME` es solo el hostname del workspace. No debe contener el HTTP path del Warehouse. `DATABRICKS_HTTP_PATH` contiene exclusivamente la ruta `/sql/1.0/warehouses/...`.
-
-Después de modificar variables de entorno en Vercel hay que crear un nuevo despliegue para que las funciones de FastAPI reciban los valores actualizados.
+El proyecto usa Vercel Services para publicar Vue y FastAPI en un único despliegue, con la base de datos en Neon. Variables de entorno, secretos y comprobaciones: [VERCEL.md](VERCEL.md).
 
 ## Banco de preguntas y anti-repetición
 
@@ -186,11 +169,11 @@ python scripts/generate_question_banks.py --new-per-topic 100 --batch-size 20
 python scripts/sync_question_banks.py
 ~~~
 
-El workflow `.github/workflows/weekly-question-banks.yml` utiliza el secreto `GROQ_API_KEY` y lotes pequeños para respetar los límites del proveedor.
+El workflow `.github/workflows/weekly-question-banks.yml` utiliza los secretos `GROQ_API_KEY` y `DATABASE_URL` y lotes pequeños para respetar los límites del proveedor.
 
 ## Perfil, estadísticas y logros
 
-La ruta `/estadisticas` muestra métricas calculadas en Databricks.
+La ruta `/estadisticas` muestra métricas calculadas en la base de datos.
 
 La ruta `/perfil` muestra partidas, puntos acumulados, mejores resultados, historial y logros desbloqueables.
 
@@ -198,29 +181,31 @@ No hay cuentas ni inicio de sesión. El nombre del jugador se conserva en el nav
 
 ## Pruebas y CI
 
-El workflow de GitHub Actions compila el backend, ejecuta los tests, construye el frontend y comprueba la conexión con Databricks.
+`.github/workflows/ci.yml` ejecuta los tests del backend, valida el esquema SQL contra un PostgreSQL real, ejecuta los tests del frontend y construye la web. `.github/workflows/health-check.yml` comprueba cada 6 horas que producción responde.
 
 Para ejecutar los tests localmente:
 
 ~~~bash
 pip install -r backend/requirements.txt
-pytest -q backend/tests
+PYTHONPATH=. pytest -q backend/tests
+cd frontend && pnpm test
 ~~~
 
 ## Configuración de GitHub Actions
 
 Crea estos secretos:
 
-- `DATABRICKS_TOKEN`
+- `DATABASE_URL`
 - `GROQ_API_KEY`
 
-El hostname y el HTTP path del Warehouse se mantienen en los workflows. Las claves nunca se guardan en el repositorio.
+Las claves nunca se guardan en el repositorio.
 
 ## Seguridad
 
-- Las credenciales de Databricks y Groq solo existen en el backend o en secretos de GitHub Actions.
+- Las credenciales de la base de datos y de Groq solo existen en el backend o en secretos de GitHub Actions.
 - `.env` está excluido de Git.
 - Las consultas SQL usan parámetros.
+- La puntuación se calcula en el servidor y las IP del límite de uso se guardan con hash.
 - La salida del agente IA se valida con JSON Schema estricto.
 - Los errores del proveedor se transforman en mensajes seguros para el frontend.
 
@@ -233,17 +218,16 @@ El hostname y el HTTP path del Warehouse se mantienen en los workflows. Las clav
 - Python
 - Groq API
 - Groq Python SDK
-- Azure Databricks
-- Databricks SQL Warehouse
-- Delta Lake
-- PySpark
+- PostgreSQL (Neon)
+- psycopg 3
 
 ## Estructura
 
 ~~~text
 OneToFour/
 ├── backend/
-│   ├── app/main.py
+│   ├── app/ (main.py, game.py, db.py, limits.py)
+│   ├── tests/
 │   ├── .env.example
 │   ├── README.md
 │   └── requirements.txt
@@ -254,13 +238,11 @@ OneToFour/
 ├── data/
 │   ├── preguntas.csv
 │   └── question_banks/
-├── notebooks/OneToFour.py
-├── sql/01_crear_tablas.sql
-├── jobs/one_to_four_job.json
+├── sql/postgres/          # esquema y banco inicial (PostgreSQL)
+├── sql/legacy_databricks/ # versión antigua, sólo de referencia
+├── notebooks/, jobs/      # versión antigua de Databricks (ya no se usa)
 └── scripts/
     ├── generate_question_banks.py
     ├── sync_question_banks.py
     └── validate_question_banks.py
 ~~~
-
-<!-- Redeploy after updating Databricks production credentials. -->
