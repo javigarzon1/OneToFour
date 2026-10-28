@@ -235,29 +235,41 @@ onBeforeUnmount(stopTimer)
 
     <template v-else>
       <div class="game-top">
-        <div class="game-player">
-          <h2>{{ player }}</h2>
-          <p class="game-mode-label"><span>{{ category }}</span><span>{{ difficulty }}</span></p>
+        <div class="game-player"><h2>{{ player }}</h2></div>
+        <div
+          class="timer"
+          :class="{ urgent: timeLeft <= 5 && !locked }"
+          role="timer"
+          :aria-label="`${timeLeft} segundos`"
+          :style="{ '--p': timerProgress }"
+        >
+          <span>{{ timeLeft }}</span>
         </div>
         <div class="game-metrics">
           <div class="metric"><span>Puntos</span><b>{{ score }}</b></div>
           <div class="metric"><span>Racha</span><b>{{ streak }}</b></div>
-          <div class="timer" :class="{ urgent: timeLeft <= 5 && !locked }" role="timer" :aria-label="`${timeLeft} segundos`">
-            <b>{{ timeLeft }}</b><span>s</span>
-            <i class="timer-fill" :style="{ width: timerProgress }"></i>
-          </div>
         </div>
       </div>
 
       <ProgressBar :current="index + 1" :total="total" :results="history" />
 
-      <article v-if="question" class="question card">
+      <div
+        class="timer"
+        :class="{ urgent: timeLeft <= 5 && !locked }"
+        :style="{ '--pct': timerProgress }"
+        role="timer"
+        :aria-label="`${timeLeft} segundos`"
+      >
+        <span><b>{{ timeLeft }}</b></span>
+      </div>
+
+      <article v-if="question" class="question">
         <div class="question-head">
           <span class="chip">{{ question.categoria }}</span>
           <span class="chip">{{ question.dificultad }}</span>
           <span class="chip chip-points">+{{ difficultyPoints }} {{ difficultyPoints === 1 ? 'punto' : 'puntos' }}</span>
         </div>
-        <h1>{{ question.pregunta }}</h1>
+        <div class="question-text"><h1>{{ question.pregunta }}</h1></div>
         <div class="answers">
           <AnswerButton
             v-for="a in answers"
