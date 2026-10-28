@@ -29,6 +29,7 @@ const questions = ref([])
 const index = ref(0)
 const score = ref(0)
 const streak = ref(0)
+const history = ref([]) // acierto (true/false) de cada pregunta ya respondida
 
 const selected = ref('')
 const locked = ref(false)
@@ -93,6 +94,7 @@ function applyState(state) {
   questions.value = state.preguntas
   score.value = state.puntuacion
   streak.value = state.racha
+  history.value = Array.isArray(state.resultados) ? [...state.resultados] : []
   index.value = Math.min(state.respondidas, Math.max(state.preguntas.length - 1, 0))
 }
 
@@ -120,6 +122,9 @@ async function answer(letter, expired = false) {
     review.value = result
     score.value = result.puntuacion
     streak.value = result.racha
+    const next = [...history.value]
+    next[index.value] = Boolean(result.acierto)
+    history.value = next
     pendingAnswer.value = null
   } catch (e) {
     answerError.value = e instanceof Error ? e.message : 'No se pudo comprobar la respuesta.'
@@ -225,34 +230,32 @@ onBeforeUnmount(stopTimer)
       <span class="state-icon" aria-hidden="true">!</span>
       <h2>No se ha podido iniciar la partida</h2>
       <p>{{ error }}</p>
-      <RouterLink class="primary ranking-cta" to="/">Volver al inicio <span>→</span></RouterLink>
+      <RouterLink class="primary ranking-cta" to="/">Volver al inicio</RouterLink>
     </div>
 
     <template v-else>
       <div class="game-top">
-        <div>
-          <small>JUGADOR</small>
+        <div class="game-player">
           <h2>{{ player }}</h2>
-          <span class="game-mode-label">{{ category }} · {{ difficulty }}</span>
+          <p class="game-mode-label"><span>{{ category }}</span><span>{{ difficulty }}</span></p>
         </div>
         <div class="game-metrics">
-          <div class="metric">Puntos <b>{{ score }}</b></div>
-          <div class="metric streak">🔥 <b>{{ streak }}</b> racha</div>
-          <div class="timer" :class="{ urgent: timeLeft <= 5 && !locked }" aria-live="polite">
-            <span>⏱</span> {{ timeLeft }}s
+          <div class="metric"><span>Puntos</span><b>{{ score }}</b></div>
+          <div class="metric"><span>Racha</span><b>{{ streak }}</b></div>
+          <div class="timer" :class="{ urgent: timeLeft <= 5 && !locked }" role="timer" :aria-label="`${timeLeft} segundos`">
+            <b>{{ timeLeft }}</b><span>s</span>
             <i class="timer-fill" :style="{ width: timerProgress }"></i>
           </div>
         </div>
       </div>
 
-      <ProgressBar :current="index + 1" :total="total" />
+      <ProgressBar :current="index + 1" :total="total" :results="history" />
 
       <article v-if="question" class="question card">
         <div class="question-head">
-          <div class="question-meta">
-            <small>{{ question.categoria }} · {{ question.dificultad }} · +{{ difficultyPoints }} puntos</small>
-          </div>
-          <span class="question-number">PREGUNTA {{ String(index + 1).padStart(2, '0') }} / {{ String(total).padStart(2, '0') }}</span>
+          <span class="chip">{{ question.categoria }}</span>
+          <span class="chip">{{ question.dificultad }}</span>
+          <span class="chip chip-points">+{{ difficultyPoints }} {{ difficultyPoints === 1 ? 'punto' : 'puntos' }}</span>
         </div>
         <h1>{{ question.pregunta }}</h1>
         <div class="answers">
@@ -274,7 +277,7 @@ onBeforeUnmount(stopTimer)
             <span v-if="timeout" class="review-chip">Tiempo agotado</span>
             <span v-else-if="isCorrect" class="review-chip">+{{ review.puntos }} puntos</span>
           </div>
-          <p class="correct-answer"><span>Respuesta correcta</span><strong>{{ review.correcta }} · {{ correctAnswerText }}</strong></p>
+          <p class="correct-answer"><span>Respuesta correcta</span><b>{{ review.correcta }}</b><strong>{{ correctAnswerText }}</strong></p>
           <p v-if="review.explicacion" class="answer-explanation">{{ review.explicacion }}</p>
         </div>
 
@@ -283,7 +286,7 @@ onBeforeUnmount(stopTimer)
           <span v-else-if="checking" class="answer-hint" role="status">Comprobando respuesta…</span>
           <span v-else-if="review" class="answer-hint">{{ index + 1 < total ? '¿Listo para la siguiente?' : 'Última pregunta completada.' }}</span>
           <button v-if="review" class="primary continue-button" type="button" :disabled="saving" @click="continueQuestion">
-            {{ saving ? 'Guardando…' : index + 1 < total ? 'Continuar' : 'Ver resultados' }} <span>→</span>
+            {{ saving ? 'Guardando…' : index + 1 < total ? 'Continuar' : 'Ver resultados' }}
           </button>
         </div>
 

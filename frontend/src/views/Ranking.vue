@@ -25,12 +25,8 @@ onMounted(loadRanking)
 <template>
   <section class="ranking page">
     <div class="ranking-heading">
-      <div>
-        <small>CLASIFICACIÓN</small>
-        <h1>Ranking</h1>
-        <p>Los mejores resultados registrados.</p>
-      </div>
-      <div class="ranking-mark" aria-hidden="true">🏆</div>
+      <h1>Ranking</h1>
+      <p>La mejor partida de cada jugador.</p>
     </div>
 
     <div v-if="loading" class="state" role="status">Cargando ranking…</div>
@@ -43,10 +39,10 @@ onMounted(loadRanking)
     </div>
 
     <div v-else-if="ranking.length === 0" class="state empty-state">
-      <span class="state-icon" aria-hidden="true">✦</span>
+      <span class="state-icon" aria-hidden="true">1</span>
       <h2>El podio está esperando</h2>
       <p>Aún no hay resultados registrados. ¡Juega una partida y estrena la clasificación!</p>
-      <RouterLink class="primary ranking-cta" to="/">Jugar ahora <span>→</span></RouterLink>
+      <RouterLink class="primary ranking-cta" to="/">Jugar ahora</RouterLink>
     </div>
 
     <div v-else class="card rows">
@@ -55,10 +51,7 @@ onMounted(loadRanking)
       </div>
       <div v-for="(x, i) in ranking" :key="x.jugador + '-' + i" class="row" :class="{ 'podium-row': i < 3 }">
         <b class="rank-position" :class="'rank-' + (i + 1)">
-          <span v-if="i === 0" aria-label="Primer puesto">♛</span>
-          <span v-else-if="i === 1" aria-label="Segundo puesto">Ⅱ</span>
-          <span v-else-if="i === 2" aria-label="Tercer puesto">Ⅲ</span>
-          <span v-else>{{ i + 1 }}</span>
+          {{ i + 1 }}
         </b>
         <strong class="rank-player">{{ x.jugador }}</strong>
         <span class="rank-points">{{ x.puntuacion }} <small>pts</small></span>

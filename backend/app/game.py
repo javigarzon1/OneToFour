@@ -138,6 +138,7 @@ def public_state(game: dict[str, Any]) -> dict[str, Any]:
         "dificultad": game["dificultad"],
         "preguntas": [public_question(q) for q in questions],
         "respondidas": len(answers),
+        "resultados": [bool(a.get("acierto")) for a in answers],
         "puntuacion": summary["puntuacion"],
         "racha": summary["racha"],
         "finalizada": bool(game["finalizada"]),

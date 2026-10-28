@@ -133,6 +133,7 @@ def test_public_state_supports_resuming():
         }
     )
     assert state["respondidas"] == 2
+    assert state["resultados"] == [True, False]
     assert state["puntuacion"] == 1
     assert all("correcta" not in q for q in state["preguntas"])
 

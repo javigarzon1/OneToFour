@@ -58,10 +58,9 @@ async function generar() {
 
 <template>
   <section class="agent page">
-    <small>AGENTE IA · GROQ</small>
-    <h1>Crea tu<br><em>propio quiz.</em></h1>
+    <h1>Crea tu propio quiz</h1>
     <p class="agent-intro">
-      Elige una categoría, un tema concreto y la dificultad. Groq generará exactamente 10 preguntas nuevas para tu partida.
+      Elige una categoría, un tema concreto y la dificultad. La IA (Groq) generará 10 preguntas nuevas para tu partida.
     </p>
 
     <form class="card agent-card" @submit.prevent="generar">
@@ -95,7 +94,7 @@ async function generar() {
       <div v-if="error" class="agent-error" role="alert">{{ error }}</div>
 
       <button class="primary" :disabled="loading">
-        {{ loading ? 'Generando 10 preguntas...' : 'Generar mi partida' }}<span>→</span>
+        {{ loading ? 'Generando 10 preguntas…' : 'Generar mi partida' }}
       </button>
     </form>
   </section>

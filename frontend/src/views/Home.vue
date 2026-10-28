@@ -14,21 +14,26 @@ function empezar() {
 
 <template>
   <section class="home page">
-    <div>
-      <small>JUEGA A· ONE TO FOUR</small>
-      <h1>¿Cuánto<br><em>sabes?</em></h1>
-      <p>Pon a prueba tus conocimientos. Cuatro opciones, una respuesta correcta y una nueva partida cada vez.</p>
+    <div class="home-main">
+      <h1>¿Cuánto<br>sabes?</h1>
+      <p class="home-lead">Cuatro opciones, una respuesta correcta y preguntas nuevas en cada partida.</p>
 
       <form class="card" @submit.prevent="empezar">
         <label>Nombre del jugador
-          <input v-model="jugador" maxlength="30" placeholder="Ej. Javi" required>
+          <input v-model="jugador" maxlength="30" placeholder="Ej. Javi" autocomplete="nickname" required>
         </label>
-        <button class="primary">Empezar partida · 10 preguntas <span>→</span></button>
+        <button class="primary">Empezar partida</button>
+        <p class="form-hint">10 preguntas y 15 segundos para responder cada una.</p>
       </form>
     </div>
 
     <div class="visual">
-      <strong>1</strong><i>/</i><strong>4</strong>
+      <div class="board" aria-hidden="true">
+        <span class="tile">A</span>
+        <span class="tile">B</span>
+        <span class="tile lit">C</span>
+        <span class="tile">D</span>
+      </div>
       <p>Una pregunta.<br>Cuatro posibilidades.</p>
     </div>
   </section>

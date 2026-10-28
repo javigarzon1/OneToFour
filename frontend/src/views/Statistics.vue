@@ -17,31 +17,34 @@ onMounted(async()=>{
 </script>
 <template>
 <section class="stats page">
-  <small>ANALÍTICA</small>
   <h1>Estadísticas</h1>
-  <p>Una visión general del rendimiento de OneToFour.</p>
-  <div v-if="loading" class="state">Cargando estadísticas...</div>
-  <div v-else-if="error" class="state">{{error}}</div>
+  <p class="page-lead">Cómo está jugando todo el mundo.</p>
+  <div v-if="loading" class="state" role="status">Cargando estadísticas…</div>
+  <div v-else-if="error" class="state error-state" role="alert">
+    <span class="state-icon" aria-hidden="true">!</span>
+    <h2>No se pudieron cargar las estadísticas</h2>
+    <p>{{error}}</p>
+  </div>
   <template v-else>
     <div class="stat-cards">
-      <div class="stat-card"><small>PARTIDAS</small><strong>{{summary.partidas||0}}</strong><span>partidas registradas</span></div>
-      <div class="stat-card"><small>JUGADORES</small><strong>{{summary.jugadores||0}}</strong><span>jugadores distintos</span></div>
-      <div class="stat-card"><small>MEDIA</small><strong>{{summary.porcentaje_medio||0}}%</strong><span>acierto medio</span></div>
-      <div class="stat-card"><small>MEJOR PUNTUACIÓN</small><strong>{{summary.mejor_puntuacion||0}}</strong><span>puntos conseguidos</span></div>
+      <div class="stat-card"><span class="stat-label">Partidas</span><strong>{{summary.partidas||0}}</strong><span class="stat-note">partidas registradas</span></div>
+      <div class="stat-card"><span class="stat-label">Jugadores</span><strong>{{summary.jugadores||0}}</strong><span class="stat-note">jugadores distintos</span></div>
+      <div class="stat-card"><span class="stat-label">Acierto medio</span><strong>{{summary.porcentaje_medio||0}}%</strong><span class="stat-note">de respuestas correctas</span></div>
+      <div class="stat-card"><span class="stat-label">Mejor puntuación</span><strong>{{summary.mejor_puntuacion||0}}</strong><span class="stat-note">puntos en una partida</span></div>
     </div>
 
     <div class="stats-grid">
       <article class="card stats-panel">
-        <div class="panel-title"><div><small>CATEGORÍAS</small><h2>Rendimiento por categoría</h2></div></div>
+        <h2>Rendimiento por categoría</h2>
         <div v-if="!data.categories.length" class="empty">Todavía no hay datos por categoría.</div>
         <div v-for="item in data.categories" :key="item.categoria" class="bar-row">
-          <div class="bar-label"><strong>{{item.categoria}}</strong><span>{{item.porcentaje_medio}}% · {{item.partidas}} partidas</span></div>
+          <div class="bar-label"><strong>{{item.categoria}}</strong><span>{{item.porcentaje_medio}}% en {{item.partidas}} partidas</span></div>
           <div class="bar"><i :style="{width:(item.porcentaje_medio/maxCategory*100)+'%'}"></i></div>
         </div>
       </article>
 
       <article class="card stats-panel">
-        <div><small>DIFICULTAD</small><h2>Rendimiento por nivel</h2></div>
+        <h2>Rendimiento por nivel</h2>
         <div v-if="!data.difficulties.length" class="empty">Todavía no hay datos por dificultad.</div>
         <div v-for="item in data.difficulties" :key="item.dificultad" class="bar-row">
           <div class="bar-label"><strong>{{item.dificultad}}</strong><span>{{item.porcentaje_medio}}%</span></div>
@@ -51,7 +54,7 @@ onMounted(async()=>{
     </div>
 
     <article class="card recent-panel">
-      <div><small>HISTORIAL</small><h2>Últimas partidas</h2></div>
+      <h2>Últimas partidas</h2>
       <div v-if="!data.recent.length" class="empty">No hay partidas registradas todavía.</div>
       <div v-else class="recent-table">
         <div class="recent-head"><span>Jugador</span><span>Puntos</span><span>Resultado</span><span>Categoría</span><span>Fecha</span></div>
