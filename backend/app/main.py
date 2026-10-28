@@ -2,16 +2,27 @@ import json
 import logging
 import os
 import re
+import time
 import uuid
 from pathlib import Path
-from contextlib import closing
 
-from databricks import sql
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from groq import Groq
+from psycopg.types.json import Jsonb
 from pydantic import BaseModel, Field
+
+from .db import database_url, get_connection
+from .game import (
+    GameError,
+    final_result,
+    public_question,
+    public_state,
+    register_answer,
+    stored_question,
+)
+from .limits import client_ip, env_int, rate_key, retry_after, window_start
 
 logger = logging.getLogger("onetoFour")
 
@@ -35,25 +46,31 @@ AI_CATEGORIES = [
 ]
 AI_DIFFICULTIES = ["Fácil", "Medio", "Difícil"]
 DEFAULT_GROQ_MODEL = "qwen/qwen3.8-27b"
+GROQ_TIMEOUT_SECONDS = 45.0
+QUESTIONS_PER_GAME = 10
 
 
 class GenerateQuizRequest(BaseModel):
     numero_preguntas: int = Field(default=10, ge=10, le=10)
     tema: str = Field(min_length=2, max_length=80)
     dificultad: str = Field(pattern="^(Fácil|Medio|Difícil)$")
+    jugador: str = Field(default="Jugador", min_length=1, max_length=30)
 
 
-class GameCreate(BaseModel):
-    jugador: str = Field(min_length=1, max_length=30)
-    puntuacion: int = Field(ge=0)
-    total_preguntas: int = Field(gt=0, le=10)
-    porcentaje: float = Field(ge=0, le=100)
-    categoria: str = "Todas"
-    dificultad: str = "Todas"
-    preguntas_ids: list[int] = Field(default_factory=list, max_length=10)
+class StartGameRequest(BaseModel):
+    jugador: str = Field(default="Jugador", min_length=1, max_length=30)
+    categoria: str = Field(default="Todas", max_length=80)
+    dificultad: str = Field(default="Todas", pattern="^(Todas|Fácil|Medio|Difícil)$")
+    modo: str = Field(default="normal", pattern="^(normal|aleatorio)$")
 
 
-app = FastAPI(title="OneToFour API", version="1.1.0")
+class AnswerRequest(BaseModel):
+    indice: int = Field(ge=0, le=QUESTIONS_PER_GAME - 1)
+    # Una letra A-D, o cadena vacía si se agotó el tiempo.
+    respuesta: str = Field(default="", pattern="^[A-D]?$")
+
+
+app = FastAPI(title="OneToFour API", version="2.0.0")
 
 allowed_origins = [
     item.strip()
@@ -72,36 +89,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-def get_connection():
-    required = [
-        "DATABRICKS_SERVER_HOSTNAME",
-        "DATABRICKS_HTTP_PATH",
-        "DATABRICKS_TOKEN",
-    ]
-    missing = [name for name in required if not os.getenv(name)]
-    if missing:
-        raise RuntimeError(
-            "Faltan variables de entorno de Databricks: " + ", ".join(missing)
-        )
-
-    token = os.environ["DATABRICKS_TOKEN"].strip()
-    if token.lower().startswith("bearer "):
-        token = token[7:].strip()
-
-    return sql.connect(
-        server_hostname=os.environ["DATABRICKS_SERVER_HOSTNAME"].strip(),
-        http_path=os.environ["DATABRICKS_HTTP_PATH"].strip(),
-        access_token=token,
-        autocommit=True,
-    )
-
-
-def rows_as_dicts(cursor):
-    columns = [column[0] for column in cursor.description]
-    return [dict(zip(columns, row)) for row in cursor.fetchall()]
-
 
 
 def build_achievements(summary):
@@ -168,38 +155,30 @@ def health():
     return {"status": "ok", "service": "onetoFour-api"}
 
 
-@app.get("/api/health/databricks")
-def databricks_health():
-    configured = {
-        "server_hostname": bool(os.getenv("DATABRICKS_SERVER_HOSTNAME")),
-        "http_path": bool(os.getenv("DATABRICKS_HTTP_PATH")),
-        "token": bool(os.getenv("DATABRICKS_TOKEN")),
-    }
+@app.get("/api/health/db")
+def database_health():
+    configured = {"database_url": database_url() is not None}
 
     try:
-        with closing(get_connection()) as connection:
-            with closing(connection.cursor()) as cursor:
-                cursor.execute("SELECT 1 AS ok")
-                return {
-                    "status": "ok",
-                    "databricks": cursor.fetchone()[0] == 1,
-                    "configured": configured,
-                }
+        with get_connection() as connection, connection.cursor() as cursor:
+            cursor.execute("SELECT 1 AS ok")
+            row = cursor.fetchone()
+            return {
+                "status": "ok",
+                "database": bool(row and row["ok"] == 1),
+                "configured": configured,
+            }
     except Exception as exc:
-        logger.exception("Error conectando con Databricks")
+        logger.exception("Error conectando con la base de datos")
         message = str(exc).lower()
         if not all(configured.values()):
             category = "configuration_missing"
-        elif (
-            "credential" in message
-            or "authentication" in message
-            or "unauthorized" in message
-            or "access token" in message
-            or getattr(exc, "status_code", None) in {401, 403}
-        ):
+        elif "password authentication" in message or "authentication" in message:
             category = "authentication_or_authorization"
-        elif isinstance(exc, TimeoutError) or "timeout" in message:
+        elif isinstance(exc, TimeoutError) or "timeout" in message or "timed out" in message:
             category = "timeout"
+        elif "does not exist" in message or "relation" in message:
+            category = "schema_missing"
         else:
             category = "connection_error"
 
@@ -207,7 +186,7 @@ def databricks_health():
             503,
             {
                 "status": "error",
-                "databricks": False,
+                "database": False,
                 "configured": configured,
                 "error_category": category,
                 "error_type": type(exc).__name__,
@@ -332,13 +311,82 @@ def validate_generated_questions(questions, request):
     return validated
 
 
+def enforce_agent_rate_limit(http_request: Request):
+    """Limita las generaciones con IA por IP y en total al día.
+
+    Los contadores están en la base de datos para que el límite sea común a
+    todas las instancias de la función. Si se supera, responde 429.
+    """
+    per_ip_limit = env_int("AGENT_RATE_LIMIT", 5)
+    window_seconds = env_int("AGENT_RATE_WINDOW_SECONDS", 600, minimum=10)
+    daily_limit = env_int("AGENT_DAILY_LIMIT", 300)
+
+    ip = client_ip(
+        http_request.headers,
+        http_request.client.host if http_request.client else None,
+    )
+    now = time.time()
+    checks = [
+        (rate_key(ip, "generate"), per_ip_limit, window_seconds),
+        ("global:generate", daily_limit, 86400),
+    ]
+
+    exceeded = None
+    try:
+        with get_connection() as connection, connection.cursor() as cursor:
+            for key, limit, seconds in checks:
+                cursor.execute(
+                    "INSERT INTO quiz.limites_uso (clave, ventana, usos) "
+                    "VALUES (%s, to_timestamp(%s), 1) "
+                    "ON CONFLICT (clave, ventana) "
+                    "DO UPDATE SET usos = quiz.limites_uso.usos + 1 "
+                    "RETURNING usos",
+                    [key, window_start(now, seconds)],
+                )
+                uses = cursor.fetchone()["usos"]
+                if uses > limit and exceeded is None:
+                    exceeded = (key, seconds)
+    except Exception:
+        logger.exception("Error comprobando el límite de uso")
+        raise HTTPException(503, "No se pudo comprobar el límite de uso. Inténtalo de nuevo.")
+
+    if exceeded:
+        key, seconds = exceeded
+        wait = retry_after(now, seconds)
+        if key.startswith("global:"):
+            message = "Se ha alcanzado el límite diario de partidas con IA. Vuelve mañana."
+        else:
+            message = (
+                "Has generado muchas partidas seguidas. "
+                f"Espera unos {max(1, round(wait / 60))} minuto(s) y vuelve a intentarlo."
+            )
+        raise HTTPException(429, message, headers={"Retry-After": str(wait)})
+
+
+def create_game(cursor, jugador, origen, categoria, dificultad, questions):
+    """Guarda una partida nueva en el servidor y devuelve su identificador."""
+    game_id = uuid.uuid4()
+    cursor.execute(
+        "INSERT INTO quiz.partidas "
+        "(partida_id, jugador, origen, categoria, dificultad, preguntas) "
+        "VALUES (%s, %s, %s, %s, %s, %s)",
+        [game_id, jugador.strip(), origen, categoria, dificultad, Jsonb(questions)],
+    )
+    # Limpieza oportunista de datos temporales.
+    cursor.execute("DELETE FROM quiz.partidas WHERE creada_en < now() - interval '2 days'")
+    cursor.execute("DELETE FROM quiz.limites_uso WHERE ventana < now() - interval '2 days'")
+    return game_id
+
+
 @app.post("/api/agent/generate")
-def generate_quiz(request: GenerateQuizRequest):
+def generate_quiz(request: GenerateQuizRequest, http_request: Request):
     if not os.getenv("GROQ_API_KEY"):
         raise HTTPException(
             503,
             "El agente IA no está configurado. Añade GROQ_API_KEY al backend.",
         )
+
+    enforce_agent_rate_limit(http_request)
 
     schema = {
         "type": "object",
@@ -412,14 +460,18 @@ def generate_quiz(request: GenerateQuizRequest):
     model = os.getenv("GROQ_MODEL", DEFAULT_GROQ_MODEL)
 
     try:
-        client = Groq(api_key=os.environ["GROQ_API_KEY"])
+        client = Groq(
+            api_key=os.environ["GROQ_API_KEY"],
+            timeout=GROQ_TIMEOUT_SECONDS,
+            max_retries=1,
+        )
         last_validation_error = None
 
         for attempt in range(2):
             current_prompt = prompt
             if attempt == 1 and last_validation_error:
                 current_prompt += (
-                    "\\n\\nLa generación anterior no superó la validación de calidad. "
+                    "\n\nLa generación anterior no superó la validación de calidad. "
                     "Genera de nuevo las 10 preguntas desde cero y corrige especialmente: "
                     f"{last_validation_error}"
                 )
@@ -464,12 +516,34 @@ def generate_quiz(request: GenerateQuizRequest):
         else:
             raise ValueError("No se pudo validar la generación del agente.")
 
+        stored = [stored_question(question) for question in questions]
+        try:
+            with get_connection() as connection, connection.cursor() as cursor:
+                game_id = create_game(
+                    cursor,
+                    request.jugador,
+                    "ia",
+                    expected_category,
+                    request.dificultad,
+                    stored,
+                )
+        except Exception:
+            logger.exception("Error guardando la partida generada")
+            raise HTTPException(
+                503,
+                "Las preguntas se generaron, pero no se pudo guardar la partida. "
+                "Inténtalo de nuevo.",
+            )
+
         return {
-            "preguntas": questions,
+            "partida_id": str(game_id),
+            "preguntas": [public_question(question) for question in stored],
             "tema": request.tema,
             "dificultad": request.dificultad,
             "generado_por": f"Groq · {model}",
         }
+    except HTTPException:
+        raise
     except Exception as exc:
         status_code = getattr(exc, "status_code", None)
 
@@ -497,173 +571,195 @@ def generate_quiz(request: GenerateQuizRequest):
 
 
 
-@app.get("/api/questions")
-def get_questions(
-    categoria: str | None = Query(None, max_length=80),
-    dificultad: str | None = Query(None, max_length=30),
-    modo: str = Query("normal", pattern="^(normal|aleatorio)$"),
-    limit: int = Query(10, ge=1, le=10),
-    jugador: str | None = Query(None, max_length=30),
-):
-    # Prioriza preguntas que este jugador aún no ha visto, pero no deja
-    # la partida vacía cuando ya ha agotado el catálogo.
-    player_name = (jugador or "Jugador").strip() or "Jugador"
-    filters = []
-    params = [player_name]
+GAME_COLUMNS = (
+    "partida_id, jugador, origen, categoria, dificultad, "
+    "preguntas, respuestas, finalizada"
+)
 
-    if modo == "normal" and categoria and categoria not in ("Todas", "Aleatorio"):
-        filters.append("p.categoria = ?")
-        params.append(categoria)
 
-    if dificultad and dificultad != "Todas":
-        filters.append("p.dificultad = ?")
-        params.append(dificultad)
-
-    where_clause = " AND ".join(filters) if filters else "1 = 1"
-    query = (
-        "WITH used_questions AS ("
-        "SELECT DISTINCT pregunta_id "
-        "FROM workspace.quiz.preguntas_usadas WHERE jugador = ?"
-        ") "
-        "SELECT p.id,p.pregunta,p.opcion_a,p.opcion_b,p.opcion_c,p.opcion_d,"
-        "p.correcta,p.categoria,p.dificultad,p.explicacion "
-        "FROM workspace.quiz.preguntas p "
-        "LEFT JOIN used_questions u ON u.pregunta_id = p.id "
-        "WHERE " + where_clause
-        + " ORDER BY CASE WHEN u.pregunta_id IS NULL THEN 0 ELSE 1 END, rand() LIMIT ?"
+def load_game(cursor, game_id, lock=False):
+    cursor.execute(
+        f"SELECT {GAME_COLUMNS} FROM quiz.partidas WHERE partida_id = %s"
+        + (" FOR UPDATE" if lock else ""),
+        [game_id],
     )
-    params.append(limit)
+    row = cursor.fetchone()
+    if row is None:
+        raise GameError(404, "No se encontró la partida. Puede haber caducado.")
+    return row
+
+
+def game_http_error(exc: GameError):
+    return HTTPException(exc.status_code, exc.message)
+
+
+@app.post("/api/games/start")
+def start_game(payload: StartGameRequest):
+    """Crea una partida con preguntas del banco y devuelve el estado inicial."""
+    jugador = payload.jugador.strip() or "Jugador"
+    random_mode = payload.modo == "aleatorio"
+
+    filters = []
+    filter_params = []
+    if not random_mode and payload.categoria not in ("Todas", "Aleatorio", ""):
+        filters.append("p.categoria = %s")
+        filter_params.append(payload.categoria)
+    if payload.dificultad != "Todas":
+        filters.append("p.dificultad = %s")
+        filter_params.append(payload.dificultad)
+    where_clause = " AND ".join(filters) if filters else "TRUE"
+
+    # Primero las preguntas que este jugador aún no ha visto. En modo aleatorio
+    # se reparte además entre categorías (la 1.ª de cada categoría, luego la 2.ª...).
+    order_by = "r.rn, random()" if random_mode else "r.usada, random()"
+    query = (
+        "SELECT r.id, r.pregunta, r.opcion_a, r.opcion_b, r.opcion_c, r.opcion_d, "
+        "r.correcta, r.categoria, r.dificultad, r.explicacion "
+        "FROM ("
+        "SELECT q.*, row_number() OVER (PARTITION BY q.categoria "
+        "ORDER BY q.usada, random()) AS rn "
+        "FROM ("
+        "SELECT p.*, EXISTS ("
+        "SELECT 1 FROM quiz.preguntas_usadas u "
+        "WHERE u.jugador = %s AND u.pregunta_id = p.id"
+        ") AS usada "
+        "FROM quiz.preguntas p WHERE " + where_clause + ""
+        ") q"
+        ") r "
+        "ORDER BY " + order_by + " LIMIT %s"
+    )
+    params = [jugador, *filter_params, QUESTIONS_PER_GAME]
 
     try:
-        with closing(get_connection()) as connection:
-            with closing(connection.cursor()) as cursor:
-                cursor.execute(query, params)
-                return rows_as_dicts(cursor)
+        with get_connection() as connection, connection.cursor() as cursor:
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+            if not rows:
+                raise GameError(404, "No hay preguntas para estos filtros.")
+
+            stored = [stored_question(row, row["id"]) for row in rows]
+            categoria = "Mixto" if random_mode else payload.categoria or "Todas"
+            game_id = create_game(
+                cursor, jugador, "banco", categoria, payload.dificultad, stored
+            )
+            return public_state(
+                {
+                    "partida_id": game_id,
+                    "jugador": jugador,
+                    "origen": "banco",
+                    "categoria": categoria,
+                    "dificultad": payload.dificultad,
+                    "preguntas": stored,
+                    "respuestas": [],
+                    "finalizada": False,
+                }
+            )
+    except GameError as exc:
+        raise game_http_error(exc)
     except Exception:
-        logger.exception("Error consultando preguntas")
-        raise HTTPException(503, "No se pudieron consultar las preguntas.")
+        logger.exception("Error creando la partida")
+        raise HTTPException(503, "No se pudo crear la partida.")
 
 
-@app.post("/api/games")
-def save_game(game: GameCreate):
-    partida_id = str(uuid.uuid4())
-
+@app.get("/api/games/{partida_id}")
+def get_game(partida_id: uuid.UUID):
+    """Estado de una partida (para retomarla si se recarga la página)."""
     try:
-        with closing(get_connection()) as connection:
-            with closing(connection.cursor()) as cursor:
-                try:
+        with get_connection() as connection, connection.cursor() as cursor:
+            return public_state(load_game(cursor, partida_id))
+    except GameError as exc:
+        raise game_http_error(exc)
+    except Exception:
+        logger.exception("Error consultando la partida")
+        raise HTTPException(503, "No se pudo consultar la partida.")
+
+
+@app.post("/api/games/{partida_id}/answer")
+def answer_game(partida_id: uuid.UUID, payload: AnswerRequest):
+    """Corrige una respuesta y devuelve la solución de esa pregunta."""
+    try:
+        with get_connection() as connection, connection.cursor() as cursor:
+            game = load_game(cursor, partida_id, lock=True)
+            if game["finalizada"]:
+                raise GameError(409, "La partida ya ha terminado.")
+            answers, feedback = register_answer(
+                game["preguntas"], game["respuestas"], payload.indice, payload.respuesta
+            )
+            cursor.execute(
+                "UPDATE quiz.partidas SET respuestas = %s WHERE partida_id = %s",
+                [Jsonb(answers), partida_id],
+            )
+            return feedback
+    except GameError as exc:
+        raise game_http_error(exc)
+    except Exception:
+        logger.exception("Error registrando la respuesta")
+        raise HTTPException(503, "No se pudo registrar la respuesta.")
+
+
+@app.post("/api/games/{partida_id}/finish")
+def finish_game(partida_id: uuid.UUID):
+    """Cierra la partida: el servidor calcula la puntuación y la guarda."""
+    try:
+        with get_connection() as connection, connection.cursor() as cursor:
+            game = load_game(cursor, partida_id, lock=True)
+            result = final_result(game)
+
+            if not game["finalizada"]:
+                cursor.execute(
+                    "INSERT INTO quiz.resultados "
+                    "(partida_id, jugador, fecha, puntuacion, total_preguntas, "
+                    "porcentaje, racha, categoria, dificultad) "
+                    "VALUES (%s, %s, now(), %s, %s, %s, %s, %s, %s) "
+                    "ON CONFLICT (partida_id) DO NOTHING",
+                    [
+                        partida_id,
+                        game["jugador"],
+                        result["puntuacion"],
+                        result["total_preguntas"],
+                        result["porcentaje"],
+                        result["racha"],
+                        game["categoria"],
+                        game["dificultad"],
+                    ],
+                )
+                used_ids = [
+                    q["id"] for q in game["preguntas"] if q.get("id") is not None
+                ]
+                if used_ids:
                     cursor.execute(
-                        "INSERT INTO workspace.quiz.resultados "
-                        "(partida_id,jugador,fecha,puntuacion,total_preguntas,porcentaje,categoria,dificultad) "
-                        "VALUES (?, ?, current_timestamp(), ?, ?, ?, ?, ?)",
-                        [
-                            partida_id,
-                            game.jugador.strip(),
-                            game.puntuacion,
-                            game.total_preguntas,
-                            game.porcentaje,
-                            game.categoria.strip(),
-                            game.dificultad.strip(),
-                        ],
+                        "INSERT INTO quiz.preguntas_usadas "
+                        "(jugador, pregunta_id, partida_id) "
+                        "SELECT %s, unnest(%s::int[]), %s "
+                        "ON CONFLICT (jugador, pregunta_id) DO NOTHING",
+                        [game["jugador"], used_ids, partida_id],
                     )
-                except Exception as exc:
-                    logger.exception(
-                        "Fallo insertando resultado en workspace.quiz.resultados"
-                    )
-                    raise RuntimeError(
-                        "No se pudo insertar la partida en workspace.quiz.resultados."
-                    ) from exc
-
-                for question_id in dict.fromkeys(game.preguntas_ids):
-                    try:
-                        cursor.execute(
-                            "INSERT INTO workspace.quiz.preguntas_usadas "
-                            "(jugador,pregunta_id,partida_id,fecha_uso) "
-                            "VALUES (?, ?, ?, current_timestamp())",
-                            [
-                                game.jugador.strip(),
-                                question_id,
-                                partida_id,
-                            ],
-                        )
-                    except Exception as exc:
-                        logger.exception(
-                            "Fallo insertando pregunta usada "
-                            "(pregunta_id=%s, partida_id=%s)",
-                            question_id,
-                            partida_id,
-                        )
-                        raise RuntimeError(
-                            "La partida se guardó, pero no se pudo registrar "
-                            "el historial de preguntas usadas."
-                        ) from exc
-
-        return {
-            "partida_id": partida_id,
-            "jugador": game.jugador.strip(),
-            "puntuacion": game.puntuacion,
-            "total_preguntas": game.total_preguntas,
-            "porcentaje": game.porcentaje,
-            "categoria": game.categoria,
-            "dificultad": game.dificultad,
-        }
-    except Exception as exc:
-        logger.exception("Error guardando partida en Databricks")
-        message = str(exc).lower()
-        status_code = getattr(exc, "status_code", None)
-
-        if status_code == 401 or "access token" in message or "invalid token" in message:
-            raise HTTPException(
-                503,
-                "No se pudo guardar la partida porque la credencial de Databricks no es válida o ha caducado.",
-            )
-
-        if (
-            status_code == 403
-            or "permission" in message
-            or "not authorized" in message
-            or "access denied" in message
-        ):
-            raise HTTPException(
-                503,
-                "Databricks permite consultar datos, pero la credencial no tiene permisos suficientes para guardar partidas. "
-                "Necesita SELECT y MODIFY (o INSERT) sobre workspace.quiz.resultados, además de USE CATALOG y USE SCHEMA.",
-            )
-
-        if isinstance(exc, RuntimeError) and str(exc).startswith(
-            "La partida se guardó, pero"
-        ):
-            raise HTTPException(503, str(exc))
-
-        if isinstance(exc, RuntimeError) and str(exc).startswith(
-            "No se pudo insertar la partida"
-        ):
-            raise HTTPException(
-                503,
-                "Databricks responde, pero no se pudo insertar el resultado. "
-                "Comprueba el esquema de workspace.quiz.resultados y los permisos de escritura del warehouse.",
-            )
-
-        raise HTTPException(
-            503,
-            "No se pudo guardar la partida en Databricks. "
-            "Consulta los logs de FastAPI para ver el error de escritura concreto.",
-        )
+                cursor.execute(
+                    "UPDATE quiz.partidas SET finalizada = true WHERE partida_id = %s",
+                    [partida_id],
+                )
+            return result
+    except GameError as exc:
+        raise game_http_error(exc)
+    except Exception:
+        logger.exception("Error guardando el resultado")
+        raise HTTPException(503, "No se pudo guardar el resultado de la partida.")
 
 
 @app.get("/api/ranking")
 def get_ranking():
+    # Una fila por jugador con su mejor partida (no mezcla máximos de partidas distintas).
     try:
-        with closing(get_connection()) as connection:
-            with closing(connection.cursor()) as cursor:
-                cursor.execute(
-                    "SELECT jugador,MAX(puntuacion) AS puntuacion,"
-                    "MAX(porcentaje) AS porcentaje "
-                    "FROM workspace.quiz.resultados "
-                    "GROUP BY jugador "
-                    "ORDER BY porcentaje DESC,puntuacion DESC,jugador ASC LIMIT 20"
-                )
-                return rows_as_dicts(cursor)
+        with get_connection() as connection, connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT jugador, puntuacion, porcentaje FROM ("
+                "SELECT DISTINCT ON (jugador) jugador, puntuacion, porcentaje "
+                "FROM quiz.resultados "
+                "ORDER BY jugador, porcentaje DESC, puntuacion DESC"
+                ") mejores "
+                "ORDER BY porcentaje DESC, puntuacion DESC, jugador ASC LIMIT 20"
+            )
+            return cursor.fetchall()
     except Exception:
         logger.exception("Error consultando ranking")
         raise HTTPException(503, "No se pudo consultar el ranking.")
@@ -673,42 +769,39 @@ def get_ranking():
 def get_stats():
     queries = {
         "summary": (
-            "SELECT COUNT(*) AS partidas,COUNT(DISTINCT jugador) AS jugadores,"
-            "ROUND(AVG(porcentaje),2) AS porcentaje_medio,"
-            "MAX(puntuacion) AS mejor_puntuacion "
-            "FROM workspace.quiz.resultados"
+            "SELECT COUNT(*) AS partidas, COUNT(DISTINCT jugador) AS jugadores, "
+            "COALESCE(ROUND(AVG(porcentaje)::numeric, 2), 0)::float8 AS porcentaje_medio, "
+            "COALESCE(MAX(puntuacion), 0) AS mejor_puntuacion "
+            "FROM quiz.resultados"
         ),
         "categories": (
-            "SELECT categoria,COUNT(*) AS partidas,"
-            "ROUND(AVG(porcentaje),2) AS porcentaje_medio,"
+            "SELECT categoria, COUNT(*) AS partidas, "
+            "ROUND(AVG(porcentaje)::numeric, 2)::float8 AS porcentaje_medio, "
             "MAX(porcentaje) AS mejor_porcentaje "
-            "FROM workspace.quiz.resultados "
+            "FROM quiz.resultados "
             "WHERE categoria IS NOT NULL AND categoria <> 'Todas' "
-            "GROUP BY categoria ORDER BY porcentaje_medio DESC,partidas DESC"
+            "GROUP BY categoria ORDER BY porcentaje_medio DESC, partidas DESC"
         ),
         "difficulties": (
-            "SELECT dificultad,COUNT(*) AS partidas,"
-            "ROUND(AVG(porcentaje),2) AS porcentaje_medio "
-            "FROM workspace.quiz.resultados "
+            "SELECT dificultad, COUNT(*) AS partidas, "
+            "ROUND(AVG(porcentaje)::numeric, 2)::float8 AS porcentaje_medio "
+            "FROM quiz.resultados "
             "WHERE dificultad IS NOT NULL AND dificultad <> 'Todas' "
             "GROUP BY dificultad ORDER BY porcentaje_medio DESC"
         ),
         "recent": (
-            "SELECT jugador,puntuacion,total_preguntas,porcentaje,"
-            "categoria,dificultad,fecha "
-            "FROM workspace.quiz.resultados ORDER BY fecha DESC LIMIT 10"
+            "SELECT jugador, puntuacion, total_preguntas, porcentaje, "
+            "categoria, dificultad, fecha "
+            "FROM quiz.resultados ORDER BY fecha DESC LIMIT 10"
         ),
     }
 
     try:
-        with closing(get_connection()) as connection:
-            result = {}
-
+        result = {}
+        with get_connection() as connection, connection.cursor() as cursor:
             for name, query in queries.items():
-                with closing(connection.cursor()) as cursor:
-                    cursor.execute(query)
-                    result[name] = rows_as_dicts(cursor)
-
+                cursor.execute(query)
+                result[name] = cursor.fetchall()
         return result
     except Exception:
         logger.exception("Error consultando estadísticas")
@@ -717,35 +810,34 @@ def get_stats():
 
 @app.get("/api/player/{jugador}/profile")
 def get_player_profile(jugador: str):
+    name = jugador.strip()
     try:
-        with closing(get_connection()) as connection:
-            with closing(connection.cursor()) as cursor:
-                cursor.execute(
-                    "SELECT COUNT(*) AS partidas,"
-                    "COALESCE(SUM(puntuacion),0) AS puntos_totales,"
-                    "COALESCE(MAX(puntuacion),0) AS mejor_puntuacion,"
-                    "COALESCE(MAX(porcentaje),0) AS mejor_porcentaje,"
-                    "COALESCE(ROUND(AVG(porcentaje),2),0) AS porcentaje_medio,"
-                    "COUNT(DISTINCT CASE WHEN categoria IS NOT NULL "
-                    "AND categoria <> 'Todas' THEN categoria END) AS categorias,"
-                    "COUNT(CASE WHEN porcentaje=100 THEN 1 END) AS perfectas,"
-                    "COUNT(CASE WHEN dificultad='Difícil' THEN 1 END) AS dificiles "
-                    "FROM workspace.quiz.resultados WHERE jugador=?",
-                    [jugador.strip()],
-                )
-                summary = rows_as_dicts(cursor)[0]
+        with get_connection() as connection, connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT COUNT(*) AS partidas, "
+                "COALESCE(SUM(puntuacion), 0) AS puntos_totales, "
+                "COALESCE(MAX(puntuacion), 0) AS mejor_puntuacion, "
+                "COALESCE(MAX(porcentaje), 0) AS mejor_porcentaje, "
+                "COALESCE(ROUND(AVG(porcentaje)::numeric, 2), 0)::float8 AS porcentaje_medio, "
+                "COUNT(DISTINCT CASE WHEN categoria IS NOT NULL "
+                "AND categoria <> 'Todas' THEN categoria END) AS categorias, "
+                "COUNT(CASE WHEN porcentaje = 100 THEN 1 END) AS perfectas, "
+                "COUNT(CASE WHEN dificultad = 'Difícil' THEN 1 END) AS dificiles "
+                "FROM quiz.resultados WHERE jugador = %s",
+                [name],
+            )
+            summary = cursor.fetchone()
 
-            with closing(connection.cursor()) as cursor:
-                cursor.execute(
-                    "SELECT puntuacion,total_preguntas,porcentaje,categoria,"
-                    "dificultad,fecha FROM workspace.quiz.resultados "
-                    "WHERE jugador=? ORDER BY fecha DESC LIMIT 8",
-                    [jugador.strip()],
-                )
-                recent = rows_as_dicts(cursor)
+            cursor.execute(
+                "SELECT puntuacion, total_preguntas, porcentaje, categoria, "
+                "dificultad, fecha FROM quiz.resultados "
+                "WHERE jugador = %s ORDER BY fecha DESC LIMIT 8",
+                [name],
+            )
+            recent = cursor.fetchall()
 
         return {
-            "jugador": jugador.strip(),
+            "jugador": name,
             "summary": summary,
             "achievements": build_achievements(summary),
             "recent": recent,

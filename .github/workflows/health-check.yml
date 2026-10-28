@@ -1,0 +1,32 @@
+name: Comprobación de producción
+
+# Avisa (el workflow falla y GitHub envía un correo) si la web o su base de datos dejan de responder.
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    env:
+      BASE_URL: ${{ vars.PRODUCTION_URL || 'https://onetofour.vercel.app' }}
+    steps:
+      - name: API
+        run: curl --fail --silent --show-error --retry 3 --retry-delay 10 "$BASE_URL/health"
+
+      - name: Base de datos
+        run: |
+          response=$(curl --silent --show-error --retry 3 --retry-delay 10 --max-time 60 -w '\n%{http_code}' "$BASE_URL/api/health/db")
+          code=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | head -n-1)
+          echo "HTTP $code"
+          echo "$body"
+          test "$code" = "200"
+          echo "$body" | grep -q '"database":true'
+
+      - name: Frontend
+        run: curl --fail --silent --show-error --retry 3 --retry-delay 10 "$BASE_URL/" -o /dev/null

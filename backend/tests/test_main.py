@@ -1,4 +1,5 @@
 import json
+import uuid
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -8,42 +9,87 @@ from backend.app.main import app
 
 client = TestClient(app)
 
+GAME_ID = uuid.uuid4()
+
 
 class FakeCursor:
-    def __init__(self, rows=None, columns=None, one=None):
-        self.rows = rows or []
-        self.columns = columns or []
-        self.one = one
-        self.description = [(column,) for column in self.columns]
-        self.executed = None
-        self.params = None
-        self.executed_history = []
+    """Cursor que devuelve, en orden, un resultado (lista de dicts) por cada execute()."""
+
+    def __init__(self, *results):
+        self.results = list(results)
+        self.rows = []
+        self.history = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
 
     def execute(self, query, params=None):
-        self.executed = query
-        self.params = params
-        self.executed_history.append(query)
+        self.history.append((query, params))
+        self.rows = self.results.pop(0) if self.results else []
 
     def fetchall(self):
         return self.rows
 
     def fetchone(self):
-        return self.one
+        return self.rows[0] if self.rows else None
 
-    def close(self):
-        pass
+    def queries(self):
+        return [query for query, _ in self.history]
 
 
 class FakeConnection:
     def __init__(self, cursor):
         self._cursor = cursor
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
     def cursor(self):
         return self._cursor
 
-    def close(self):
-        pass
 
+def use_db(cursor):
+    return patch(
+        "backend.app.main.get_connection",
+        return_value=FakeConnection(cursor),
+    )
+
+
+def stored(index, correct="A", level="Fácil"):
+    return {
+        "id": 100 + index,
+        "pregunta": f"Pregunta de prueba número {index}",
+        "opcion_a": "Uno",
+        "opcion_b": "Dos",
+        "opcion_c": "Tres",
+        "opcion_d": "Cuatro",
+        "correcta": correct,
+        "categoria": "Historia",
+        "dificultad": level,
+        "explicacion": f"Explicación {index}.",
+    }
+
+
+def game_row(answers=None, finished=False, questions=None):
+    return {
+        "partida_id": GAME_ID,
+        "jugador": "Javi",
+        "origen": "banco",
+        "categoria": "Historia",
+        "dificultad": "Todas",
+        "preguntas": questions or [stored(0, "A", "Fácil"), stored(1, "B", "Medio")],
+        "respuestas": answers or [],
+        "finalizada": finished,
+    }
+
+
+# --- salud -----------------------------------------------------------------
 
 def test_health():
     response = client.get("/health")
@@ -51,16 +97,28 @@ def test_health():
     assert response.json()["status"] == "ok"
 
 
-def test_databricks_health():
-    cursor = FakeCursor(one=(1,))
-    with patch(
-        "backend.app.main.get_connection",
-        return_value=FakeConnection(cursor),
-    ):
-        response = client.get("/api/health/databricks")
+def test_database_health():
+    cursor = FakeCursor([{"ok": 1}])
+    with patch.dict("os.environ", {"DATABASE_URL": "postgres://u:p@h/db"}, clear=True):
+        with use_db(cursor):
+            response = client.get("/api/health/db")
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "databricks": True}
+    assert response.json() == {
+        "status": "ok",
+        "database": True,
+        "configured": {"database_url": True},
+    }
+
+
+def test_database_health_reports_missing_configuration():
+    with patch.dict("os.environ", {}, clear=True):
+        response = client.get("/api/health/db")
+
+    assert response.status_code == 503
+    detail = response.json()["detail"]
+    assert detail["error_category"] == "configuration_missing"
+    assert detail["configured"] == {"database_url": False}
 
 
 def test_ai_health_without_key():
@@ -89,152 +147,7 @@ def test_ai_health_with_key():
     }
 
 
-def test_questions_endpoint_returns_rows():
-    cursor = FakeCursor(
-        rows=[(
-            1,
-            "Pregunta de prueba",
-            "A",
-            "B",
-            "C",
-            "D",
-            "A",
-            "Prueba",
-            "Fácil",
-        )],
-        columns=[
-            "id",
-            "pregunta",
-            "opcion_a",
-            "opcion_b",
-            "opcion_c",
-            "opcion_d",
-            "correcta",
-            "categoria",
-            "dificultad",
-        ],
-    )
-
-    with patch(
-        "backend.app.main.get_connection",
-        return_value=FakeConnection(cursor),
-    ):
-        response = client.get("/api/questions?limit=1")
-
-    assert response.status_code == 200
-    assert response.json()[0]["pregunta"] == "Pregunta de prueba"
-    assert "workspace.quiz.preguntas" in cursor.executed
-
-
-def test_save_game():
-    cursor = FakeCursor()
-
-    with patch(
-        "backend.app.main.get_connection",
-        return_value=FakeConnection(cursor),
-    ):
-        response = client.post(
-            "/api/games",
-            json={
-                "jugador": "Javi",
-                "puntuacion": 4,
-                "total_preguntas": 5,
-                "porcentaje": 80,
-            },
-        )
-
-    assert response.status_code == 200
-    assert response.json()["jugador"] == "Javi"
-    assert response.json()["puntuacion"] == 4
-    assert any(
-        "workspace.quiz.resultados" in query
-        for query in cursor.executed_history
-    )
-
-
-def test_ranking_endpoint():
-    cursor = FakeCursor(
-        rows=[("Javi", 5, 100.0)],
-        columns=["jugador", "puntuacion", "porcentaje"],
-    )
-
-    with patch(
-        "backend.app.main.get_connection",
-        return_value=FakeConnection(cursor),
-    ):
-        response = client.get("/api/ranking")
-
-    assert response.status_code == 200
-    assert response.json() == [
-        {"jugador": "Javi", "puntuacion": 5, "porcentaje": 100.0}
-    ]
-
-
-def test_stats_endpoint():
-    cursors = [
-        FakeCursor(
-            rows=[(3, 2, 75.0, 10)],
-            columns=[
-                "partidas",
-                "jugadores",
-                "porcentaje_medio",
-                "mejor_puntuacion",
-            ],
-        ),
-        FakeCursor(
-            rows=[("Programación", 2, 80.0, 100.0)],
-            columns=[
-                "categoria",
-                "partidas",
-                "porcentaje_medio",
-                "mejor_porcentaje",
-            ],
-        ),
-        FakeCursor(
-            rows=[("Medio", 2, 70.0)],
-            columns=["dificultad", "partidas", "porcentaje_medio"],
-        ),
-        FakeCursor(
-            rows=[(
-                "Javi",
-                5,
-                5,
-                100.0,
-                "Programación",
-                "Medio",
-                "2026-09-30",
-            )],
-            columns=[
-                "jugador",
-                "puntuacion",
-                "total_preguntas",
-                "porcentaje",
-                "categoria",
-                "dificultad",
-                "fecha",
-            ],
-        ),
-    ]
-
-    class MultiCursorConnection:
-        def cursor(self):
-            return cursors.pop(0)
-
-        def close(self):
-            pass
-
-    with patch(
-        "backend.app.main.get_connection",
-        return_value=MultiCursorConnection(),
-    ):
-        response = client.get("/api/stats")
-
-    assert response.status_code == 200
-    assert response.json()["summary"][0]["partidas"] == 3
-    assert response.json()["categories"][0]["categoria"] == "Programación"
-    assert response.json()["difficulties"][0]["dificultad"] == "Medio"
-    assert response.json()["recent"][0]["jugador"] == "Javi"
-
+# --- agente IA -------------------------------------------------------------
 
 def test_agent_options():
     response = client.get("/api/agent/options")
@@ -244,25 +157,35 @@ def test_agent_options():
     assert response.json()["proveedor"] == "Groq"
     assert "Historia" in response.json()["categorias"]
     assert "Difícil" in response.json()["dificultades"]
-    assert response.json()["modelo"] == "qwen/qwen3.8-27b"
 
 
 def test_agent_requires_api_key():
     with patch.dict("os.environ", {}, clear=True):
         response = client.post(
             "/api/agent/generate",
-            json={
-                "numero_preguntas": 10,
-                "tema": "Historia",
-                "dificultad": "Medio",
-            },
+            json={"numero_preguntas": 10, "tema": "Historia", "dificultad": "Medio"},
         )
 
     assert response.status_code == 503
 
 
-def test_agent_generates_ten_questions_with_groq():
-    questions = [
+def fake_groq(questions):
+    fake_client = SimpleNamespace()
+    fake_client.chat = SimpleNamespace()
+    fake_client.chat.completions = SimpleNamespace(
+        create=lambda **kwargs: SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(content=json.dumps({"preguntas": questions}))
+                )
+            ]
+        )
+    )
+    return fake_client
+
+
+def generated_questions():
+    return [
         {
             "pregunta": f"Pregunta de prueba número {index}",
             "opcion_a": "Opción A",
@@ -277,146 +200,329 @@ def test_agent_generates_ten_questions_with_groq():
         for index in range(1, 11)
     ]
 
-    fake_client = SimpleNamespace()
-    fake_client.chat = SimpleNamespace()
-    fake_client.chat.completions = SimpleNamespace(
-        create=lambda **kwargs: SimpleNamespace(
-            choices=[
-                SimpleNamespace(
-                    message=SimpleNamespace(
-                        content=json.dumps({"preguntas": questions})
-                    )
-                )
-            ]
-        )
-    )
+
+def test_agent_generates_ten_questions_and_creates_game():
+    # execute(): límite por IP, límite global, INSERT partida y dos DELETE de limpieza.
+    cursor = FakeCursor([{"usos": 1}], [{"usos": 1}], [], [], [])
 
     with patch.dict("os.environ", {"GROQ_API_KEY": "test-key"}, clear=True):
-        with patch("backend.app.main.Groq", return_value=fake_client):
+        with patch("backend.app.main.Groq", return_value=fake_groq(generated_questions())):
+            with use_db(cursor):
+                response = client.post(
+                    "/api/agent/generate",
+                    json={
+                        "numero_preguntas": 10,
+                        "tema": "Videojuegos — Años 90",
+                        "dificultad": "Medio",
+                        "jugador": "Javi",
+                    },
+                )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert uuid.UUID(body["partida_id"])
+    assert len(body["preguntas"]) == 10
+    assert body["tema"] == "Videojuegos — Años 90"
+    assert body["generado_por"] == "Groq · qwen/qwen3.8-27b"
+    # El navegador no recibe las soluciones.
+    assert all("correcta" not in q and "explicacion" not in q for q in body["preguntas"])
+    assert any("INSERT INTO quiz.partidas" in query for query in cursor.queries())
+
+
+def test_agent_is_rate_limited_per_ip():
+    cursor = FakeCursor([{"usos": 99}], [{"usos": 1}])
+
+    with patch.dict("os.environ", {"GROQ_API_KEY": "test-key"}, clear=True):
+        with use_db(cursor):
             response = client.post(
                 "/api/agent/generate",
-                json={
-                    "numero_preguntas": 10,
-                    "tema": "Videojuegos — Años 90",
-                    "dificultad": "Medio",
-                },
+                json={"numero_preguntas": 10, "tema": "Historia", "dificultad": "Medio"},
             )
+
+    assert response.status_code == 429
+    assert int(response.headers["retry-after"]) >= 1
+
+
+def test_agent_stops_when_daily_limit_is_reached():
+    cursor = FakeCursor([{"usos": 1}], [{"usos": 10_000}])
+
+    with patch.dict("os.environ", {"GROQ_API_KEY": "test-key"}, clear=True):
+        with use_db(cursor):
+            response = client.post(
+                "/api/agent/generate",
+                json={"numero_preguntas": 10, "tema": "Historia", "dificultad": "Medio"},
+            )
+
+    assert response.status_code == 429
+    assert "diario" in response.json()["detail"]
+
+
+# --- partidas --------------------------------------------------------------
+
+def test_start_game_from_question_bank():
+    rows = [stored(i) for i in range(10)]
+    cursor = FakeCursor(rows, [], [], [])
+
+    with use_db(cursor):
+        response = client.post(
+            "/api/games/start",
+            json={"jugador": "Javi", "categoria": "Historia", "dificultad": "Fácil"},
+        )
 
     assert response.status_code == 200
     body = response.json()
     assert len(body["preguntas"]) == 10
-    assert body["tema"] == "Videojuegos — Años 90"
-    assert body["generado_por"] == "Groq · qwen/qwen3.8-27b"
+    assert body["respondidas"] == 0
+    assert body["origen"] == "banco"
+    assert all("correcta" not in q for q in body["preguntas"])
+
+    select_query, select_params = cursor.history[0]
+    assert "quiz.preguntas" in select_query
+    assert "random()" in select_query
+    assert "p.categoria = %s" in select_query
+    assert "p.dificultad = %s" in select_query
+    assert select_params == ["Javi", "Historia", "Fácil", 10]
 
 
-def test_questions_random_mode_uses_all_topics():
-    cursor = FakeCursor(rows=[], columns=[])
+def test_start_random_game_balances_categories_and_ignores_category():
+    cursor = FakeCursor([stored(0)], [], [], [])
 
-    with patch(
-        "backend.app.main.get_connection",
-        return_value=FakeConnection(cursor),
-    ):
-        response = client.get("/api/questions?modo=aleatorio&limit=5")
+    with use_db(cursor):
+        response = client.post(
+            "/api/games/start",
+            json={"jugador": "Javi", "categoria": "Historia", "modo": "aleatorio"},
+        )
 
     assert response.status_code == 200
-    assert "workspace.quiz.preguntas" in cursor.executed
-    assert "ORDER BY CASE WHEN u.pregunta_id IS NULL THEN 0 ELSE 1 END, rand()" in cursor.executed
-    assert "p.categoria = ?" not in cursor.executed
-    assert cursor.params == ["Jugador", 5]
+    select_query, select_params = cursor.history[0]
+    assert "PARTITION BY q.categoria" in select_query
+    assert "ORDER BY r.rn, random()" in select_query
+    assert "p.categoria = %s" not in select_query
+    assert select_params == ["Javi", 10]
+    assert response.json()["categoria"] == "Mixto"
+
+
+def test_start_game_without_questions_returns_404():
+    cursor = FakeCursor([])
+
+    with use_db(cursor):
+        response = client.post("/api/games/start", json={"jugador": "Javi"})
+
+    assert response.status_code == 404
+
+
+def test_get_game_returns_public_state():
+    cursor = FakeCursor([game_row(answers=[{"respuesta": "A", "acierto": True}])])
+
+    with use_db(cursor):
+        response = client.get(f"/api/games/{GAME_ID}")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["respondidas"] == 1
+    assert body["puntuacion"] == 1
+    assert all("correcta" not in q for q in body["preguntas"])
+
+
+def test_get_unknown_game_returns_404():
+    with use_db(FakeCursor([])):
+        response = client.get(f"/api/games/{uuid.uuid4()}")
+
+    assert response.status_code == 404
+
+
+def test_answer_correct_reveals_solution_and_saves():
+    cursor = FakeCursor([game_row()], [])
+
+    with use_db(cursor):
+        response = client.post(
+            f"/api/games/{GAME_ID}/answer", json={"indice": 0, "respuesta": "A"}
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["acierto"] is True
+    assert body["correcta"] == "A"
+    assert body["puntos"] == 1
+    assert body["explicacion"] == "Explicación 0."
+    assert any("UPDATE quiz.partidas SET respuestas" in q for q in cursor.queries())
+    assert "FOR UPDATE" in cursor.history[0][0]
+
+
+def test_answer_wrong_does_not_score():
+    with use_db(FakeCursor([game_row()], [])):
+        response = client.post(
+            f"/api/games/{GAME_ID}/answer", json={"indice": 0, "respuesta": "C"}
+        )
+
+    assert response.status_code == 200
+    assert response.json()["acierto"] is False
+    assert response.json()["puntos"] == 0
+
+
+def test_answer_out_of_order_is_rejected():
+    cursor = FakeCursor([game_row()])
+
+    with use_db(cursor):
+        response = client.post(
+            f"/api/games/{GAME_ID}/answer", json={"indice": 1, "respuesta": "B"}
+        )
+
+    assert response.status_code == 409
+    assert not any("UPDATE" in q for q in cursor.queries())
+
+
+def test_answer_on_finished_game_is_rejected():
+    with use_db(FakeCursor([game_row(finished=True)])):
+        response = client.post(
+            f"/api/games/{GAME_ID}/answer", json={"indice": 0, "respuesta": "A"}
+        )
+
+    assert response.status_code == 409
+
+
+def test_answer_validates_payload():
+    response = client.post(
+        f"/api/games/{GAME_ID}/answer", json={"indice": 0, "respuesta": "Z"}
+    )
+    assert response.status_code == 422
+
+    response = client.post(
+        f"/api/games/{GAME_ID}/answer", json={"indice": 99, "respuesta": "A"}
+    )
+    assert response.status_code == 422
+
+
+def test_finish_computes_score_on_the_server_and_saves_result():
+    answers = [
+        {"respuesta": "A", "acierto": True},
+        {"respuesta": "B", "acierto": True},
+    ]
+    cursor = FakeCursor([game_row(answers=answers)], [], [], [])
+
+    with use_db(cursor):
+        response = client.post(f"/api/games/{GAME_ID}/finish")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["puntuacion"] == 3  # 1 (fácil) + 2 (medio)
+    assert body["porcentaje"] == 100
+    assert body["racha"] == 2
+
+    insert_query, insert_params = next(
+        item for item in cursor.history if "INSERT INTO quiz.resultados" in item[0]
+    )
+    assert "ON CONFLICT (partida_id) DO NOTHING" in insert_query
+    assert 3 in insert_params and 100 in insert_params
+    assert any("INSERT INTO quiz.preguntas_usadas" in q for q in cursor.queries())
+    assert any("SET finalizada = true" in q for q in cursor.queries())
+
+
+def test_finish_requires_all_answers():
+    cursor = FakeCursor([game_row(answers=[{"respuesta": "A", "acierto": True}])])
+
+    with use_db(cursor):
+        response = client.post(f"/api/games/{GAME_ID}/finish")
+
+    assert response.status_code == 409
+    assert not any("INSERT" in q for q in cursor.queries())
+
+
+def test_finish_is_idempotent():
+    answers = [
+        {"respuesta": "A", "acierto": True},
+        {"respuesta": "B", "acierto": True},
+    ]
+    cursor = FakeCursor([game_row(answers=answers, finished=True)])
+
+    with use_db(cursor):
+        response = client.post(f"/api/games/{GAME_ID}/finish")
+
+    assert response.status_code == 200
+    assert response.json()["puntuacion"] == 3
+    assert len(cursor.history) == 1  # sólo la lectura: no se vuelve a guardar
+
+
+def test_client_can_no_longer_post_its_own_score():
+    response = client.post(
+        "/api/games",
+        json={"jugador": "Tramposo", "puntuacion": 99, "total_preguntas": 10, "porcentaje": 100},
+    )
+
+    assert response.status_code in (404, 405)
+
+
+# --- ranking, estadísticas y perfil -----------------------------------------
+
+def test_ranking_endpoint():
+    cursor = FakeCursor([{"jugador": "Javi", "puntuacion": 5, "porcentaje": 100.0}])
+
+    with use_db(cursor):
+        response = client.get("/api/ranking")
+
+    assert response.status_code == 200
+    assert response.json() == [{"jugador": "Javi", "puntuacion": 5, "porcentaje": 100.0}]
+    assert "DISTINCT ON (jugador)" in cursor.history[0][0]
+
+
+def test_stats_endpoint():
+    cursor = FakeCursor(
+        [{"partidas": 3, "jugadores": 2, "porcentaje_medio": 75.0, "mejor_puntuacion": 10}],
+        [{"categoria": "Historia", "partidas": 2, "porcentaje_medio": 80.0, "mejor_porcentaje": 100.0}],
+        [{"dificultad": "Medio", "partidas": 2, "porcentaje_medio": 70.0}],
+        [
+            {
+                "jugador": "Javi",
+                "puntuacion": 5,
+                "total_preguntas": 5,
+                "porcentaje": 100.0,
+                "categoria": "Historia",
+                "dificultad": "Medio",
+                "fecha": "2026-09-30",
+            }
+        ],
+    )
+
+    with use_db(cursor):
+        response = client.get("/api/stats")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["summary"][0]["partidas"] == 3
+    assert body["categories"][0]["categoria"] == "Historia"
+    assert body["difficulties"][0]["dificultad"] == "Medio"
+    assert body["recent"][0]["jugador"] == "Javi"
 
 
 def test_player_profile():
-    cursors = [
-        FakeCursor(
-            rows=[(4, 28, 10, 100.0, 82.5, 3, 1, 1)],
-            columns=[
-                "partidas",
-                "puntos_totales",
-                "mejor_puntuacion",
-                "mejor_porcentaje",
-                "porcentaje_medio",
-                "categorias",
-                "perfectas",
-                "dificiles",
-            ],
-        ),
-        FakeCursor(
-            rows=[(
-                10,
-                10,
-                100.0,
-                "Ciencia",
-                "Difícil",
-                "2026-09-30",
-            )],
-            columns=[
-                "puntuacion",
-                "total_preguntas",
-                "porcentaje",
-                "categoria",
-                "dificultad",
-                "fecha",
-            ],
-        ),
+    summary = {
+        "partidas": 6,
+        "puntos_totales": 40,
+        "mejor_puntuacion": 9,
+        "mejor_porcentaje": 100.0,
+        "porcentaje_medio": 82.5,
+        "categorias": 3,
+        "perfectas": 1,
+        "dificiles": 1,
+    }
+    recent = [
+        {
+            "puntuacion": 9,
+            "total_preguntas": 10,
+            "porcentaje": 100.0,
+            "categoria": "Historia",
+            "dificultad": "Difícil",
+            "fecha": "2026-09-30",
+        }
     ]
 
-    class ProfileConnection:
-        def cursor(self):
-            return cursors.pop(0)
-
-        def close(self):
-            pass
-
-    with patch(
-        "backend.app.main.get_connection",
-        return_value=ProfileConnection(),
-    ):
+    with use_db(FakeCursor([summary], recent)):
         response = client.get("/api/player/Javi/profile")
 
     assert response.status_code == 200
     body = response.json()
     assert body["jugador"] == "Javi"
-    assert body["summary"]["partidas"] == 4
-    assert body["summary"]["porcentaje_medio"] == 82.5
-    assert body["achievements"][0]["desbloqueado"] is True
-    assert body["achievements"][1]["desbloqueado"] is False
-    assert body["recent"][0]["categoria"] == "Ciencia"
-
-
-def test_questions_prioritize_unused_but_allow_repeats():
-    cursor = FakeCursor(rows=[], columns=[])
-
-    with patch(
-        "backend.app.main.get_connection",
-        return_value=FakeConnection(cursor),
-    ):
-        response = client.get("/api/questions?limit=5")
-
-    assert response.status_code == 200
-    assert "workspace.quiz.preguntas_usadas" in cursor.executed
-    assert "WHERE jugador = ?" in cursor.executed
-    assert "u.pregunta_id IS NULL THEN 0 ELSE 1 END" in cursor.executed
-    assert "NOT EXISTS" not in cursor.executed
-    assert cursor.params == ["Jugador", 5]
-
-
-def test_save_game_records_question_ids():
-    cursor = FakeCursor()
-
-    with patch(
-        "backend.app.main.get_connection",
-        return_value=FakeConnection(cursor),
-    ):
-        response = client.post(
-            "/api/games",
-            json={
-                "jugador": "Javi",
-                "puntuacion": 4,
-                "total_preguntas": 2,
-                "porcentaje": 100,
-                "preguntas_ids": [1000001, 1000002],
-            },
-        )
-
-    assert response.status_code == 200
-    assert "preguntas_usadas" in cursor.executed
+    assert body["summary"]["partidas"] == 6
+    unlocked = {a["id"] for a in body["achievements"] if a["desbloqueado"]}
+    assert {"primera", "cinco", "perfecta", "categorias_tres", "dificil"} <= unlocked
+    assert "diez" not in unlocked
