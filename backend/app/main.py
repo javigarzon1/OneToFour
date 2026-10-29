@@ -393,8 +393,6 @@ def generate_quiz(request: GenerateQuizRequest, http_request: Request):
         "properties": {
             "preguntas": {
                 "type": "array",
-                "minItems": 10,
-                "maxItems": 10,
                 "items": {
                     "type": "object",
                     "properties": {
@@ -563,10 +561,13 @@ def generate_quiz(request: GenerateQuizRequest, http_request: Request):
             )
 
         logger.exception("Error generando preguntas con Groq (modelo=%s)", model)
+        # Detalle técnico breve (sin claves) para poder diagnosticar el fallo desde la propia web.
+        reason = str(getattr(exc, "message", "") or exc).strip().replace("\n", " ")[:180]
+        code = f"HTTP {status_code}" if status_code else type(exc).__name__
         raise HTTPException(
             502,
             "No se pudieron generar las preguntas con el agente IA. "
-            "Revisa la configuración de Groq o inténtalo de nuevo.",
+            f"Detalle: {code}: {reason}",
         )
 
 
