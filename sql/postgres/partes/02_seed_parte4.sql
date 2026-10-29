@@ -1,0 +1,30 @@
+INSERT INTO quiz.preguntas
+  (id, pregunta, opcion_a, opcion_b, opcion_c, opcion_d, correcta, categoria, dificultad, explicacion)
+VALUES
+  (195, '¿Quién pintó Las meninas?', 'Velázquez', 'El Greco', 'Goya', 'Murillo', 'A', 'Arte', 'Fácil', 'Las meninas fue pintado por Diego Velázquez.'),
+  (196, '¿Qué artista creó La persistencia de la memoria?', 'Salvador Dalí', 'Joan Miró', 'Pablo Picasso', 'Edvard Munch', 'A', 'Arte', 'Fácil', 'La persistencia de la memoria es una obra de Salvador Dalí.'),
+  (197, '¿Qué estilo arquitectónico caracteriza muchas catedrales medievales con arcos apuntados?', 'Gótico', 'Románico', 'Neoclásico', 'Rococó', 'A', 'Arte', 'Medio', 'El gótico utiliza habitualmente arcos apuntados y grandes vidrieras.'),
+  (198, '¿Qué pintor español realizó Los fusilamientos del 3 de mayo?', 'Goya', 'Velázquez', 'Picasso', 'Sorolla', 'A', 'Arte', 'Medio', 'Francisco de Goya pintó Los fusilamientos del 3 de mayo.'),
+  (199, '¿Qué técnica consiste en pintar sobre yeso húmedo?', 'Fresco', 'Collage', 'Grabado', 'Acuarela', 'A', 'Arte', 'Medio', 'El fresco se pinta sobre una capa de yeso húmedo.'),
+  (200, '¿Qué escultor creó El pensador?', 'Rodin', 'Bernini', 'Donatello', 'Canova', 'A', 'Arte', 'Fácil', 'El pensador es una escultura de Auguste Rodin.'),
+  (201, '¿Quién escribió Don Quijote de la Mancha?', 'Miguel de Cervantes', 'Lope de Vega', 'Quevedo', 'Calderón de la Barca', 'A', 'Literatura', 'Fácil', 'Don Quijote de la Mancha fue escrito por Miguel de Cervantes.'),
+  (202, '¿Qué novela comienza con la familia Buendía?', 'Cien años de soledad', 'La Regenta', 'Rayuela', 'Fortunata y Jacinta', 'A', 'Literatura', 'Medio', 'La familia Buendía protagoniza Cien años de soledad.'),
+  (203, '¿Quién escribió Romeo y Julieta?', 'William Shakespeare', 'Charles Dickens', 'Oscar Wilde', 'George Orwell', 'A', 'Literatura', 'Fácil', 'Romeo y Julieta es una obra de William Shakespeare.'),
+  (204, '¿Qué autor creó al detective Sherlock Holmes?', 'Arthur Conan Doyle', 'Agatha Christie', 'Jules Verne', 'H. G. Wells', 'A', 'Literatura', 'Fácil', 'Sherlock Holmes fue creado por Arthur Conan Doyle.'),
+  (205, '¿Qué novela escribió George Orwell sobre una sociedad totalitaria?', '1984', 'Ulises', 'Madame Bovary', 'Moby Dick', 'A', 'Literatura', 'Fácil', '1984 es una novela distópica de George Orwell.'),
+  (206, '¿Quién escribió La metamorfosis?', 'Franz Kafka', 'Thomas Mann', 'Hermann Hesse', 'Stefan Zweig', 'A', 'Literatura', 'Fácil', 'La metamorfosis fue escrita por Franz Kafka.'),
+  (207, '¿Qué poeta chileno ganó el Nobel de Literatura en 1971?', 'Pablo Neruda', 'Gabriela Mistral', 'Nicanor Parra', 'Vicente Huidobro', 'A', 'Literatura', 'Medio', 'Pablo Neruda recibió el Nobel de Literatura en 1971.'),
+  (208, '¿Qué novela tiene como protagonista al capitán Ahab?', 'Moby Dick', 'Robinson Crusoe', 'La isla del tesoro', 'Drácula', 'A', 'Literatura', 'Medio', 'El capitán Ahab persigue a Moby Dick en la novela de Herman Melville.'),
+  (209, '¿Qué autora creó al detective Hércules Poirot?', 'Agatha Christie', 'Virginia Woolf', 'Jane Austen', 'Mary Shelley', 'A', 'Literatura', 'Fácil', 'Agatha Christie creó a Hércules Poirot.'),
+  (210, '¿Qué obra de Dante describe un viaje por Infierno, Purgatorio y Paraíso?', 'La divina comedia', 'El Decamerón', 'Fausto', 'El príncipe', 'A', 'Literatura', 'Medio', 'La divina comedia narra ese viaje alegórico.'),
+  (211, '¿Qué país es conocido por tener forma de hexágono en representaciones geográficas?', 'Francia', 'España', 'Italia', 'Polonia', 'A', 'Cultura general', 'Fácil', 'Francia continental se describe a menudo como un hexágono.'),
+  (212, '¿Cuántos días tiene un año bisiesto?', '364', '365', '366', '367', 'C', 'Cultura general', 'Fácil', 'Un año bisiesto tiene 366 días.'),
+  (213, '¿Qué planeta es conocido como el planeta rojo?', 'Venus', 'Marte', 'Júpiter', 'Saturno', 'B', 'Cultura general', 'Fácil', 'Marte recibe el nombre de planeta rojo por el aspecto de su superficie.'),
+  (214, '¿Cuántos lados tiene un hexágono?', '5', '6', '7', '8', 'B', 'Cultura general', 'Fácil', 'Un hexágono tiene seis lados.'),
+  (215, '¿Qué idioma tiene más hablantes nativos aproximadamente?', 'Español', 'Inglés', 'Chino mandarín', 'Francés', 'C', 'Cultura general', 'Medio', 'El chino mandarín es el idioma con más hablantes nativos.'),
+  (216, '¿Qué metal es líquido a temperatura ambiente?', 'Hierro', 'Mercurio', 'Cobre', 'Aluminio', 'B', 'Cultura general', 'Fácil', 'El mercurio es líquido a temperatura ambiente.'),
+  (217, '¿Cuántos minutos tiene una hora?', '30', '45', '60', '90', 'C', 'Cultura general', 'Fácil', 'Una hora tiene 60 minutos.'),
+  (218, '¿Qué país tiene como capital a Lisboa?', 'España', 'Portugal', 'Italia', 'Grecia', 'B', 'Cultura general', 'Fácil', 'Lisboa es la capital de Portugal.'),
+  (219, '¿Qué instrumento se utiliza para medir la temperatura?', 'Barómetro', 'Termómetro', 'Higrómetro', 'Anemómetro', 'B', 'Cultura general', 'Fácil', 'El termómetro mide la temperatura.'),
+  (220, '¿Qué color se obtiene al mezclar azul y amarillo en pintura tradicional?', 'Rojo', 'Verde', 'Naranja', 'Violeta', 'B', 'Cultura general', 'Fácil', 'En mezcla sustractiva tradicional de pigmentos, azul y amarillo producen verde.')
+ON CONFLICT (id) DO NOTHING;
